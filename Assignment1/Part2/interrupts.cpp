@@ -5,29 +5,36 @@
 #include <sstream>
 #include <random>
 #include <chrono>
-#include <unordered_map>
 #include <iomanip>
 
-// Structure to represent an activity in the trace file
 struct Activity {
-    std::string type;  // Type of activity (CPU, SYSCALL, END_IO)
-    int duration;      // Duration of the activity in milliseconds
+    std::string type;
+    int duration;
 };
 
-// Structure to represent an entry in the vector table
 struct VectorTableEntry {
-    int syscall_number;  // System call number
-    int isr_address;     // Address of the Interrupt Service Routine (ISR)
+    int syscall_number;
+    int isr_address;
 };
 
-// Vector table mapping system calls to their ISR addresses
-std::vector<VectorTableEntry> vectorTable = {
-    {7, 14},
-    {12, 22},
-    {20, 40}
-};
+std::vector<VectorTableEntry> readVectorTable(const std::string& filename) {
+    std::vector<VectorTableEntry> vectorTable;
+    std::ifstream file(filename);
+    std::string line;
+    int syscall_number = 0;
 
-// Function to read the trace file and create a vector of activities
+    while (std::getline(file, line)) {
+        int isr_address;
+        std::istringstream iss(line);
+        if (iss >> std::hex >> isr_address) {
+            vectorTable.push_back({syscall_number, isr_address});
+            syscall_number++;
+        }
+    }
+
+    return vectorTable;
+}
+
 std::vector<Activity> readTrace(const std::string& filename) {
     std::vector<Activity> trace;
     std::ifstream file(filename);
@@ -37,13 +44,11 @@ std::vector<Activity> readTrace(const std::string& filename) {
         throw std::runtime_error("Unable to open trace file: " + filename);
     }
     
-    // Read each line of the trace file
     while (std::getline(file, line)) {
         std::istringstream iss(line);
         std::string type;
         int duration;
         
-        // Parse the activity type and duration
         if (std::getline(iss, type, ',') && iss >> duration) {
             trace.push_back({type, duration});
         }
@@ -52,33 +57,27 @@ std::vector<Activity> readTrace(const std::string& filename) {
     return trace;
 }
 
-// Function to simulate the interrupt handling process
-void simulateInterrupts(const std::vector<Activity>& trace, const std::string& outputFile) {
+void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<VectorTableEntry>& vectorTable, const std::string& outputFile) {
     std::ofstream execFile(outputFile);
     if (!execFile.is_open()) {
         throw std::runtime_error("Unable to open output file: " + outputFile);
     }
 
     int currentTime = 0;
-    // Random number generator for context switch time
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
     std::uniform_int_distribution<int> contextDist(1, 3);
     std::uniform_int_distribution<int> isrActivityDist(100, 400);
 
-    // Counters for different types of time
     int totalCPUTime = 0;
     int totalIOTime = 0;
     int totalOverhead = 0;
 
-    // Process each activity in the trace
     for (const auto& activity : trace) {
         if (activity.type == "CPU") {
-            // Handle CPU activity
             currentTime += activity.duration;
             execFile << currentTime << ", " << activity.duration << ", CPU activity\n";
             totalCPUTime += activity.duration;
         } else if (activity.type.find("SYSCALL") != std::string::npos) {
-            // Handle system call
             int syscall_num = std::stoi(activity.type.substr(8));
             
             // Switch to kernel mode
@@ -86,7 +85,7 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::string& o
             execFile << currentTime << ", 1, switch to kernel mode\n";
             totalOverhead += 1;
             
-            // Save context (simulated with random time)
+            // Save context
             int saveTime = contextDist(rng);
             currentTime += saveTime;
             execFile << currentTime << ", " << saveTime << ", context saved\n";
@@ -94,26 +93,43 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::string& o
             
             // Find vector in the vector table
             currentTime += 1;
-            execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position " << (syscall_num * 2) << "\n";
+            int vectorPosition = syscall_num * 2;
+            execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position " << vectorPosition << "\n";
             totalOverhead += 1;
             
             // Obtain ISR address
             currentTime += 1;
-            execFile << currentTime << ", 1, obtain ISR address\n";
+            int isrAddress = vectorTable[syscall_num].isr_address;
+            execFile << currentTime << ", 1, obtain ISR address 0x" << std::hex << isrAddress << std::dec << "\n";
             totalOverhead += 1;
             
-            // Execute ISR (simulated as calling device driver)
-            int isrDuration = activity.duration;
-            currentTime += isrDuration;
-            execFile << currentTime << ", " << isrDuration << ", call device driver\n";
-            totalIOTime += isrDuration;
+            // Execute ISR activities
+            int remainingDuration = activity.duration;
+            while (remainingDuration > 0) {
+                int isrActivityDuration = std::min(isrActivityDist(rng), remainingDuration);
+                currentTime += isrActivityDuration;
+                execFile << currentTime << ", " << isrActivityDuration << ", ISR activity\n";
+                totalIOTime += isrActivityDuration;
+                remainingDuration -= isrActivityDuration;
+            }
             
             // Return from interrupt (IRET)
             currentTime += 1;
             execFile << currentTime << ", 1, IRET\n";
             totalOverhead += 1;
+
+            // Restore context
+            int restoreTime = contextDist(rng);
+            currentTime += restoreTime;
+            execFile << currentTime << ", " << restoreTime << ", context restored\n";
+            totalOverhead += restoreTime;
+
+            // Switch back to user mode
+            currentTime += 1;
+            execFile << currentTime << ", 1, switch to user mode\n";
+            totalOverhead += 1;
+            
         } else if (activity.type.find("END_IO") != std::string::npos) {
-            // Handle end of I/O operation
             int io_num = std::stoi(activity.type.substr(7));
             currentTime += activity.duration;
             execFile << currentTime << ", " << activity.duration << ", end of I/O " << io_num << ": interrupt\n";
@@ -121,7 +137,6 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::string& o
         }
     }
 
-    // Calculate and write summary statistics
     int totalTime = currentTime;
     execFile << "\nSummary:\n";
     execFile << "Total time: " << totalTime << " ms\n";
@@ -133,17 +148,15 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::string& o
 }
 
 int main(int argc, char* argv[]) {
-    // Check for correct number of command-line arguments
-    if (argc != 3) {
-        std::cerr << "Usage: " << argv[0] << " <input_file> <output_file>\n";
+    if (argc != 4) {
+        std::cerr << "Usage: " << argv[0] << " <input_file> <vector_table_file> <output_file>\n";
         return 1;
     }
 
     try {
-        // Read the trace file
         std::vector<Activity> trace = readTrace(argv[1]);
-        // Simulate the interrupt handling process
-        simulateInterrupts(trace, argv[2]);
+        std::vector<VectorTableEntry> vectorTable = readVectorTable(argv[2]);
+        simulateInterrupts(trace, vectorTable, argv[3]);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
