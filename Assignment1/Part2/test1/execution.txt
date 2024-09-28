@@ -1,0 +1,39 @@
+50, 50, CPU activity
+51, 1, switch to kernel mode
+52, 1, context saved
+53, 1, find vector 7 in memory position 14
+54, 1, obtain ISR address
+164, 110, call device driver
+165, 1, IRET
+335, 170, end of I/O 20: interrupt
+435, 100, CPU activity
+436, 1, switch to kernel mode
+439, 3, context saved
+440, 1, find vector 12 in memory position 24
+441, 1, obtain ISR address
+691, 250, call device driver
+692, 1, IRET
+1020, 328, end of I/O 22: interrupt
+1040, 20, CPU activity
+1041, 1, switch to kernel mode
+1042, 1, context saved
+1043, 1, find vector 7 in memory position 14
+1044, 1, obtain ISR address
+1139, 95, call device driver
+1140, 1, IRET
+1290, 150, end of I/O 20: interrupt
+1370, 80, CPU activity
+1371, 1, switch to kernel mode
+1372, 1, context saved
+1373, 1, find vector 12 in memory position 24
+1374, 1, obtain ISR address
+1574, 200, call device driver
+1575, 1, IRET
+1855, 280, end of I/O 22: interrupt
+1885, 30, CPU activity
+
+Summary:
+Total time: 1885 ms
+CPU time: 280 ms (14.85%)
+I/O time: 1583 ms (83.98%)
+Overhead: 22 ms (1.17%)
