@@ -1,10 +1,10 @@
 0, 35, CPU execution
-35, 3, switch to kernel mode and context saved
-38, 1, find vector 2 in memory position 0x0004
-39, 1, load address 0X004F into the PC
-40, 45, SYSCALL: run the ISR
-85, 45, transfer data
-130, 24, check for errors
+35, 2, switch to kernel mode and context saved
+37, 1, find vector 2 in memory position 0x0004
+38, 1, load address 0X004F into the PC
+39, 46, SYSCALL: run the ISR
+85, 46, transfer data
+131, 23, check for errors
 154, 3, IRET and context restored
 157, 30, CPU execution
 187, 1, check priority of interrupt
@@ -13,21 +13,23 @@
 191, 1, find vector 5 in memory position 0x000A
 192, 1, load address 0X0069 into the PC
 193, 242, END_IO
-435, 2, IRET and context restored
-437, 80, CPU execution
+435, 3, IRET and context restored
+438, 80, CPU execution
 
 Performance Metrics:
-Total Execution Time: 517
+Total Execution Time: 518
 Total Context Switches: 2
 Total ISR Executions: 2
 Time Spent on Vector Table Lookups: 2
 Time Spent in Interrupt Handling: 311
 Time Spent in CPU Operations: 145
-Time Spent in I/O Operations: 45
+Time Spent in I/O Operations: 46
 Total Context Switch Time: 10
-CPU Utilization: 28.05%
+Total Syscall Time: 122
+Total ISR Execution Time: 357
+CPU Utilization: 27.99%
 Average I/O Response Time: 0.00
-Ratio of CPU to I/O Time: 3.22
+Ratio of CPU to I/O Time: 3.15
 System Throughput: 0.00 ISRs per time unit
 min_context_time: 1
 max_context_time: 3
