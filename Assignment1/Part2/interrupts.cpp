@@ -23,6 +23,10 @@ std::vector<VectorTableEntry> readVectorTable(const std::string& filename) {
     std::string line;
     int syscall_number = 0;
 
+    if (!file.is_open()) {
+        throw std::runtime_error("Unable to open vector table file: " + filename);
+    }
+
     while (std::getline(file, line)) {
         int isr_address;
         std::istringstream iss(line);
@@ -66,93 +70,86 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
     int currentTime = 0;
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
     std::uniform_int_distribution<int> contextDist(1, 3);
-    std::uniform_int_distribution<int> isrActivityDist(100, 400);
-
-    int totalCPUTime = 0;
-    int totalIOTime = 0;
-    int totalOverhead = 0;
 
     for (const auto& activity : trace) {
         if (activity.type == "CPU") {
+            execFile << currentTime << ", " << activity.duration << ", CPU execution\n";
             currentTime += activity.duration;
-            execFile << currentTime << ", " << activity.duration << ", CPU activity\n";
-            totalCPUTime += activity.duration;
         } else if (activity.type.find("SYSCALL") != std::string::npos) {
             int syscall_num = std::stoi(activity.type.substr(8));
             
-            // Switch to kernel mode
-            currentTime += 1;
             execFile << currentTime << ", 1, switch to kernel mode\n";
-            totalOverhead += 1;
-            
-            // Save context
-            int saveTime = contextDist(rng);
-            currentTime += saveTime;
-            execFile << currentTime << ", " << saveTime << ", context saved\n";
-            totalOverhead += saveTime;
-            
-            // Find vector in the vector table
             currentTime += 1;
-            int vectorPosition = syscall_num * 2;
-            execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position " << vectorPosition << "\n";
-            totalOverhead += 1;
             
-            // Obtain ISR address
+            int contextSaveTime = contextDist(rng);
+            execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
+            currentTime += contextSaveTime;
+            
+            execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position 0x" 
+                     << std::hex << std::setw(4) << std::setfill('0') << (syscall_num * 2) << std::dec << "\n";
             currentTime += 1;
-            int isrAddress = vectorTable[syscall_num].isr_address;
-            execFile << currentTime << ", 1, obtain ISR address 0x" << std::hex << isrAddress << std::dec << "\n";
-            totalOverhead += 1;
             
-            // Execute ISR activities
-            int remainingDuration = activity.duration;
-            while (remainingDuration > 0) {
-                int isrActivityDuration = std::min(isrActivityDist(rng), remainingDuration);
-                currentTime += isrActivityDuration;
-                execFile << currentTime << ", " << isrActivityDuration << ", ISR activity\n";
-                totalIOTime += isrActivityDuration;
-                remainingDuration -= isrActivityDuration;
-            }
-            
-            // Return from interrupt (IRET)
+            execFile << currentTime << ", 1, load address 0X" 
+                     << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
+                     << vectorTable[syscall_num].isr_address << std::dec << " into the PC\n";
             currentTime += 1;
+            
+            // Simulate ISR execution with three steps
+            int totalIsrTime = activity.duration - 4 - contextSaveTime;
+            int runIsrTime = totalIsrTime * 2 / 5;
+            int transferDataTime = totalIsrTime * 2 / 5;
+            int checkErrorsTime = totalIsrTime - runIsrTime - transferDataTime;
+            
+            execFile << currentTime << ", " << runIsrTime << ", SYSCALL: run the ISR\n";
+            currentTime += runIsrTime;
+            
+            execFile << currentTime << ", " << transferDataTime << ", transfer data\n";
+            currentTime += transferDataTime;
+            
+            execFile << currentTime << ", " << checkErrorsTime << ", check for errors\n";
+            currentTime += checkErrorsTime;
+            
             execFile << currentTime << ", 1, IRET\n";
-            totalOverhead += 1;
-
-            // Restore context
-            int restoreTime = contextDist(rng);
-            currentTime += restoreTime;
-            execFile << currentTime << ", " << restoreTime << ", context restored\n";
-            totalOverhead += restoreTime;
-
-            // Switch back to user mode
             currentTime += 1;
-            execFile << currentTime << ", 1, switch to user mode\n";
-            totalOverhead += 1;
             
         } else if (activity.type.find("END_IO") != std::string::npos) {
             int io_num = std::stoi(activity.type.substr(7));
-            currentTime += activity.duration;
-            execFile << currentTime << ", " << activity.duration << ", end of I/O " << io_num << ": interrupt\n";
-            totalIOTime += activity.duration;
+            
+            execFile << currentTime << ", 1, check priority of interrupt\n";
+            currentTime += 1;
+            execFile << currentTime << ", 1, check if masked\n";
+            currentTime += 1;
+            execFile << currentTime << ", 1, switch to kernel mode\n";
+            currentTime += 1;
+            
+            int contextSaveTime = contextDist(rng);
+            execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
+            currentTime += contextSaveTime;
+            
+            execFile << currentTime << ", 1, find vector " << io_num << " in memory position 0x" 
+                     << std::hex << std::setw(4) << std::setfill('0') << (io_num * 2) << std::dec << "\n";
+            currentTime += 1;
+            
+            execFile << currentTime << ", 1, load address 0X" 
+                     << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
+                     << vectorTable[io_num].isr_address << std::dec << " into the PC\n";
+            currentTime += 1;
+            
+            execFile << currentTime << ", " << (activity.duration - 6 - contextSaveTime) << ", END_IO\n";
+            currentTime += (activity.duration - 6 - contextSaveTime);
+            
+            execFile << currentTime << ", 1, IRET\n";
+            currentTime += 1;
         }
     }
 
-    int totalTime = currentTime;
-    execFile << "\nSummary:\n";
-    execFile << "Total time: " << totalTime << " ms\n";
-    execFile << "CPU time: " << totalCPUTime << " ms (" << std::fixed << std::setprecision(2) << (100.0 * totalCPUTime / totalTime) << "%)\n";
-    execFile << "I/O time: " << totalIOTime << " ms (" << std::fixed << std::setprecision(2) << (100.0 * totalIOTime / totalTime) << "%)\n";
-    execFile << "Overhead: " << totalOverhead << " ms (" << std::fixed << std::setprecision(2) << (100.0 * totalOverhead / totalTime) << "%)\n";
-
     execFile.close();
 }
-
 int main(int argc, char* argv[]) {
     if (argc != 4) {
         std::cerr << "Usage: " << argv[0] << " <input_file> <vector_table_file> <output_file>\n";
         return 1;
     }
-
     try {
         std::vector<Activity> trace = readTrace(argv[1]);
         std::vector<VectorTableEntry> vectorTable = readVectorTable(argv[2]);
