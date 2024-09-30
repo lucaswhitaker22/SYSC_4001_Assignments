@@ -74,20 +74,21 @@ struct PerformanceMetrics {
     std::map<int, int> syscallStartTimes;
 };
 
-void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<VectorTableEntry>& vectorTable, const std::string& outputFile) {
-    std::ofstream execFile(outputFile);
+void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<VectorTableEntry>& vectorTable, const std::string& outputFile, int min_context_time = 1, int max_context_time = 3) {    std::ofstream execFile(outputFile);
     if (!execFile.is_open()) {
         throw std::runtime_error("Unable to open output file: " + outputFile);
     }
 
     int currentTime = 0;
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
-    std::uniform_int_distribution<int> contextDist(1, 3);
+    std::uniform_int_distribution<int> contextDist(min_context_time, max_context_time);
 
     PerformanceMetrics metrics;
 
-    for (const auto& activity : trace) {
+
+  for (const auto& activity : trace) {
         if (activity.type == "CPU") {
+            // CPU operation handling (unchanged)
             execFile << currentTime << ", " << activity.duration << ", CPU execution\n";
             currentTime += activity.duration;
             metrics.totalExecutionTime += activity.duration;
@@ -95,24 +96,22 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
         } else if (activity.type.find("SYSCALL") != std::string::npos) {
             int syscall_num = std::stoi(activity.type.substr(7));
             
-            execFile << currentTime << ", 1, switch to kernel mode\n";
-            currentTime += 1;
+            // Context switch to kernel mode
+            int contextSwitchTime = contextDist(rng);
+            execFile << currentTime << ", " << contextSwitchTime << ", switch to kernel mode and context saved\n";
+            currentTime += contextSwitchTime;
             metrics.totalContextSwitches++;
-            metrics.totalExecutionTime += 1;
-            metrics.totalContextSwitchTime += 1;
+            metrics.totalExecutionTime += contextSwitchTime;
+            metrics.totalContextSwitchTime += contextSwitchTime;
             
-            int contextSaveTime = contextDist(rng);
-            execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
-            currentTime += contextSaveTime;
-            metrics.totalExecutionTime += contextSaveTime;
-            metrics.totalContextSwitchTime += contextSaveTime;
-            
+            // Find vector in memory
             execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position 0x" 
                      << std::hex << std::setw(4) << std::setfill('0') << (syscall_num * 2) << std::dec << "\n";
             currentTime += 1;
             metrics.timeSpentOnVectorTableLookups += 1;
             metrics.totalExecutionTime += 1;
             
+            // Load ISR address into PC
             execFile << currentTime << ", 1, load address 0X" 
                      << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
                      << vectorTable[syscall_num].isr_address << std::dec << " into the PC\n";
@@ -120,58 +119,64 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
             metrics.totalISRExecutions++;
             metrics.totalExecutionTime += 1;
             
-            int totalIsrTime = activity.duration - 4 - contextSaveTime;
+            // Calculate ISR execution times
+            int totalIsrTime = activity.duration - 2 - contextSwitchTime;
             int runIsrTime = totalIsrTime * 2 / 5;
             int transferDataTime = totalIsrTime * 2 / 5;
             int checkErrorsTime = totalIsrTime - runIsrTime - transferDataTime;
             
+            // Run ISR
             execFile << currentTime << ", " << runIsrTime << ", SYSCALL: run the ISR\n";
             currentTime += runIsrTime;
             metrics.timeSpentInInterruptHandling += runIsrTime;
             metrics.totalExecutionTime += runIsrTime;
             
+            // Transfer data
             execFile << currentTime << ", " << transferDataTime << ", transfer data\n";
             currentTime += transferDataTime;
             metrics.timeSpentInIOOperations += transferDataTime;
             metrics.totalExecutionTime += transferDataTime;
             
+            // Check for errors
             execFile << currentTime << ", " << checkErrorsTime << ", check for errors\n";
             currentTime += checkErrorsTime;
             metrics.timeSpentInInterruptHandling += checkErrorsTime;
             metrics.totalExecutionTime += checkErrorsTime;
             
-            execFile << currentTime << ", 1, IRET\n";
-            currentTime += 1;
-            metrics.totalExecutionTime += 1;
-            metrics.totalContextSwitchTime += 1;
+            // Return from interrupt
+            int iretTime = contextDist(rng);
+            execFile << currentTime << ", " << iretTime << ", IRET and context restored\n";
+            currentTime += iretTime;
+            metrics.totalExecutionTime += iretTime;
+            metrics.totalContextSwitchTime += iretTime;
 
             metrics.syscallStartTimes[syscall_num] = currentTime;
             
         } else if (activity.type.find("END_IO") != std::string::npos) {
             int io_num = std::stoi(activity.type.substr(6));
             
+            // Check interrupt priority and mask
             execFile << currentTime << ", 1, check priority of interrupt\n";
             currentTime += 1;
             execFile << currentTime << ", 1, check if masked\n";
             currentTime += 1;
-            execFile << currentTime << ", 1, switch to kernel mode\n";
-            currentTime += 1;
+            
+            // Context switch to kernel mode
+            int contextSwitchTime = contextDist(rng);
+            execFile << currentTime << ", " << contextSwitchTime << ", switch to kernel mode and context saved\n";
+            currentTime += contextSwitchTime;
             metrics.totalContextSwitches++;
-            metrics.totalExecutionTime += 3;
-            metrics.totalContextSwitchTime += 3;
+            metrics.totalExecutionTime += contextSwitchTime + 2;
+            metrics.totalContextSwitchTime += contextSwitchTime;
             
-            int contextSaveTime = contextDist(rng);
-            execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
-            currentTime += contextSaveTime;
-            metrics.totalExecutionTime += contextSaveTime;
-            metrics.totalContextSwitchTime += contextSaveTime;
-            
+            // Find vector in memory
             execFile << currentTime << ", 1, find vector " << io_num << " in memory position 0x" 
                      << std::hex << std::setw(4) << std::setfill('0') << (io_num * 2) << std::dec << "\n";
             currentTime += 1;
             metrics.timeSpentOnVectorTableLookups += 1;
             metrics.totalExecutionTime += 1;
             
+            // Load ISR address into PC
             execFile << currentTime << ", 1, load address 0X" 
                      << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
                      << vectorTable[io_num].isr_address << std::dec << " into the PC\n";
@@ -179,16 +184,19 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
             metrics.totalISRExecutions++;
             metrics.totalExecutionTime += 1;
             
-            int ioHandlingTime = activity.duration - 6 - contextSaveTime;
+            // Handle I/O completion
+            int ioHandlingTime = activity.duration - 4 - contextSwitchTime;
             execFile << currentTime << ", " << ioHandlingTime << ", END_IO\n";
             currentTime += ioHandlingTime;
             metrics.timeSpentInInterruptHandling += ioHandlingTime;
             metrics.totalExecutionTime += ioHandlingTime;
             
-            execFile << currentTime << ", 1, IRET\n";
-            currentTime += 1;
-            metrics.totalExecutionTime += 1;
-            metrics.totalContextSwitchTime += 1;
+            // Return from interrupt
+            int iretTime = contextDist(rng);
+            execFile << currentTime << ", " << iretTime << ", IRET and context restored\n";
+            currentTime += iretTime;
+            metrics.totalExecutionTime += iretTime;
+            metrics.totalContextSwitchTime += iretTime;
 
             if (metrics.syscallStartTimes.find(io_num) != metrics.syscallStartTimes.end()) {
                 int responseTime = currentTime - metrics.syscallStartTimes[io_num];
@@ -197,7 +205,6 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
             }
         }
     }
-
     // Calculate additional metrics
     int totalIOTime = metrics.timeSpentInIOOperations;
     int totalCPUTime = metrics.timeSpentInCPUOperations;
@@ -221,18 +228,32 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
     execFile << "Average I/O Response Time: " << std::fixed << std::setprecision(2) << averageIOResponseTime << "\n";
     execFile << "Ratio of CPU to I/O Time: " << std::fixed << std::setprecision(2) << static_cast<double>(totalCPUTime) / totalIOTime << "\n";
     execFile << "System Throughput: " << std::fixed << std::setprecision(2) << static_cast<double>(metrics.totalISRExecutions) / metrics.totalExecutionTime << " ISRs per time unit\n";
+    execFile << "min_context_time: " << min_context_time << "\n";
+    execFile << "max_context_time: " << max_context_time << "\n";
 
     execFile.close();
 }
+
 int main(int argc, char* argv[]) {
-    if (argc != 4) {
-        std::cerr << "Usage: " << argv[0] << " <input_file> <vector_table_file> <output_file>\n";
+    if (argc < 4 || argc > 6) {
+        std::cerr << "Usage: " << argv[0] << " <trace_file> <vector_table_file> <output_file> [min_context_time] [max_context_time]\n";
         return 1;
     }
+
     try {
         std::vector<Activity> trace = readTrace(argv[1]);
         std::vector<VectorTableEntry> vectorTable = readVectorTable(argv[2]);
-        simulateInterrupts(trace, vectorTable, argv[3]);
+        
+        if (argc == 4) {
+            simulateInterrupts(trace, vectorTable, argv[3]);
+        } else if (argc == 6) {
+            int min_context_time = std::stoi(argv[4]);
+            int max_context_time = std::stoi(argv[5]);
+            simulateInterrupts(trace, vectorTable, argv[3], min_context_time, max_context_time);
+        } else {
+            std::cerr << "Invalid number of arguments\n";
+            return 1;
+        }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
