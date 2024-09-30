@@ -6,7 +6,7 @@
 #include <random>
 #include <chrono>
 #include <iomanip>
-
+#include <map>
 struct Activity {
     std::string type;
     int duration;
@@ -61,6 +61,19 @@ std::vector<Activity> readTrace(const std::string& filename) {
     return trace;
 }
 
+struct PerformanceMetrics {
+    int totalExecutionTime = 0;
+    int totalContextSwitches = 0;
+    int totalISRExecutions = 0;
+    int timeSpentOnVectorTableLookups = 0;
+    int timeSpentInInterruptHandling = 0;
+    int timeSpentInCPUOperations = 0;
+    int timeSpentInIOOperations = 0;
+    int totalContextSwitchTime = 0;
+    std::vector<int> ioResponseTimes;
+    std::map<int, int> syscallStartTimes;
+};
+
 void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<VectorTableEntry>& vectorTable, const std::string& outputFile) {
     std::ofstream execFile(outputFile);
     if (!execFile.is_open()) {
@@ -71,30 +84,42 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
     std::mt19937 rng(std::chrono::steady_clock::now().time_since_epoch().count());
     std::uniform_int_distribution<int> contextDist(1, 3);
 
+    PerformanceMetrics metrics;
+
     for (const auto& activity : trace) {
         if (activity.type == "CPU") {
             execFile << currentTime << ", " << activity.duration << ", CPU execution\n";
             currentTime += activity.duration;
+            metrics.totalExecutionTime += activity.duration;
+            metrics.timeSpentInCPUOperations += activity.duration;
         } else if (activity.type.find("SYSCALL") != std::string::npos) {
-            int syscall_num = std::stoi(activity.type.substr(8));
+            int syscall_num = std::stoi(activity.type.substr(7));
             
             execFile << currentTime << ", 1, switch to kernel mode\n";
             currentTime += 1;
+            metrics.totalContextSwitches++;
+            metrics.totalExecutionTime += 1;
+            metrics.totalContextSwitchTime += 1;
             
             int contextSaveTime = contextDist(rng);
             execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
             currentTime += contextSaveTime;
+            metrics.totalExecutionTime += contextSaveTime;
+            metrics.totalContextSwitchTime += contextSaveTime;
             
             execFile << currentTime << ", 1, find vector " << syscall_num << " in memory position 0x" 
                      << std::hex << std::setw(4) << std::setfill('0') << (syscall_num * 2) << std::dec << "\n";
             currentTime += 1;
+            metrics.timeSpentOnVectorTableLookups += 1;
+            metrics.totalExecutionTime += 1;
             
             execFile << currentTime << ", 1, load address 0X" 
                      << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
                      << vectorTable[syscall_num].isr_address << std::dec << " into the PC\n";
             currentTime += 1;
+            metrics.totalISRExecutions++;
+            metrics.totalExecutionTime += 1;
             
-            // Simulate ISR execution with three steps
             int totalIsrTime = activity.duration - 4 - contextSaveTime;
             int runIsrTime = totalIsrTime * 2 / 5;
             int transferDataTime = totalIsrTime * 2 / 5;
@@ -102,18 +127,28 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
             
             execFile << currentTime << ", " << runIsrTime << ", SYSCALL: run the ISR\n";
             currentTime += runIsrTime;
+            metrics.timeSpentInInterruptHandling += runIsrTime;
+            metrics.totalExecutionTime += runIsrTime;
             
             execFile << currentTime << ", " << transferDataTime << ", transfer data\n";
             currentTime += transferDataTime;
+            metrics.timeSpentInIOOperations += transferDataTime;
+            metrics.totalExecutionTime += transferDataTime;
             
             execFile << currentTime << ", " << checkErrorsTime << ", check for errors\n";
             currentTime += checkErrorsTime;
+            metrics.timeSpentInInterruptHandling += checkErrorsTime;
+            metrics.totalExecutionTime += checkErrorsTime;
             
             execFile << currentTime << ", 1, IRET\n";
             currentTime += 1;
+            metrics.totalExecutionTime += 1;
+            metrics.totalContextSwitchTime += 1;
+
+            metrics.syscallStartTimes[syscall_num] = currentTime;
             
         } else if (activity.type.find("END_IO") != std::string::npos) {
-            int io_num = std::stoi(activity.type.substr(7));
+            int io_num = std::stoi(activity.type.substr(6));
             
             execFile << currentTime << ", 1, check priority of interrupt\n";
             currentTime += 1;
@@ -121,27 +156,71 @@ void simulateInterrupts(const std::vector<Activity>& trace, const std::vector<Ve
             currentTime += 1;
             execFile << currentTime << ", 1, switch to kernel mode\n";
             currentTime += 1;
+            metrics.totalContextSwitches++;
+            metrics.totalExecutionTime += 3;
+            metrics.totalContextSwitchTime += 3;
             
             int contextSaveTime = contextDist(rng);
             execFile << currentTime << ", " << contextSaveTime << ", context saved\n";
             currentTime += contextSaveTime;
+            metrics.totalExecutionTime += contextSaveTime;
+            metrics.totalContextSwitchTime += contextSaveTime;
             
             execFile << currentTime << ", 1, find vector " << io_num << " in memory position 0x" 
                      << std::hex << std::setw(4) << std::setfill('0') << (io_num * 2) << std::dec << "\n";
             currentTime += 1;
+            metrics.timeSpentOnVectorTableLookups += 1;
+            metrics.totalExecutionTime += 1;
             
             execFile << currentTime << ", 1, load address 0X" 
                      << std::hex << std::uppercase << std::setw(4) << std::setfill('0') 
                      << vectorTable[io_num].isr_address << std::dec << " into the PC\n";
             currentTime += 1;
+            metrics.totalISRExecutions++;
+            metrics.totalExecutionTime += 1;
             
-            execFile << currentTime << ", " << (activity.duration - 6 - contextSaveTime) << ", END_IO\n";
-            currentTime += (activity.duration - 6 - contextSaveTime);
+            int ioHandlingTime = activity.duration - 6 - contextSaveTime;
+            execFile << currentTime << ", " << ioHandlingTime << ", END_IO\n";
+            currentTime += ioHandlingTime;
+            metrics.timeSpentInInterruptHandling += ioHandlingTime;
+            metrics.totalExecutionTime += ioHandlingTime;
             
             execFile << currentTime << ", 1, IRET\n";
             currentTime += 1;
+            metrics.totalExecutionTime += 1;
+            metrics.totalContextSwitchTime += 1;
+
+            if (metrics.syscallStartTimes.find(io_num) != metrics.syscallStartTimes.end()) {
+                int responseTime = currentTime - metrics.syscallStartTimes[io_num];
+                metrics.ioResponseTimes.push_back(responseTime);
+                metrics.syscallStartTimes.erase(io_num);
+            }
         }
     }
+
+    // Calculate additional metrics
+    int totalIOTime = metrics.timeSpentInIOOperations;
+    int totalCPUTime = metrics.timeSpentInCPUOperations;
+    double cpuUtilization = static_cast<double>(totalCPUTime) / metrics.totalExecutionTime * 100.0;
+    double averageIOResponseTime = 0;
+    if (!metrics.ioResponseTimes.empty()) {
+        averageIOResponseTime = static_cast<double>(std::accumulate(metrics.ioResponseTimes.begin(), metrics.ioResponseTimes.end(), 0)) / metrics.ioResponseTimes.size();
+    }
+
+    // Write performance metrics at the bottom of the execution
+    execFile << "\nPerformance Metrics:\n";
+    execFile << "Total Execution Time: " << metrics.totalExecutionTime << "\n";
+    execFile << "Total Context Switches: " << metrics.totalContextSwitches << "\n";
+    execFile << "Total ISR Executions: " << metrics.totalISRExecutions << "\n";
+    execFile << "Time Spent on Vector Table Lookups: " << metrics.timeSpentOnVectorTableLookups << "\n";
+    execFile << "Time Spent in Interrupt Handling: " << metrics.timeSpentInInterruptHandling << "\n";
+    execFile << "Time Spent in CPU Operations: " << metrics.timeSpentInCPUOperations << "\n";
+    execFile << "Time Spent in I/O Operations: " << metrics.timeSpentInIOOperations << "\n";
+    execFile << "Total Context Switch Time: " << metrics.totalContextSwitchTime << "\n";
+    execFile << "CPU Utilization: " << std::fixed << std::setprecision(2) << cpuUtilization << "%\n";
+    execFile << "Average I/O Response Time: " << std::fixed << std::setprecision(2) << averageIOResponseTime << "\n";
+    execFile << "Ratio of CPU to I/O Time: " << std::fixed << std::setprecision(2) << static_cast<double>(totalCPUTime) / totalIOTime << "\n";
+    execFile << "System Throughput: " << std::fixed << std::setprecision(2) << static_cast<double>(metrics.totalISRExecutions) / metrics.totalExecutionTime << " ISRs per time unit\n";
 
     execFile.close();
 }
