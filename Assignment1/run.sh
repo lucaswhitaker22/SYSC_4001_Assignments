@@ -23,7 +23,7 @@ for sim_num in 1 2 3 4 5; do
     fi
     
     # Run the interrupt simulator
-    ./interrupts "simulations/$sim_num/trace.txt" "simulations/vector_table.txt" "simulations/$sim_num/execution.txt"
+    ./interrupts "simulations/$sim_num/trace.txt" "simulations/$sim_num/vector_table.txt" "simulations/$sim_num/execution.txt"
     
     # Check if the simulation was successful
     if [ $? -eq 0 ]; then
