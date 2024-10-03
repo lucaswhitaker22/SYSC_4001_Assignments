@@ -1,66 +1,69 @@
 0, 50, CPU execution
-50, 1, switch to kernel mode and context saved
-51, 1, find vector 7 in memory position 0x000e
-52, 1, load address 0X00BD into the PC
-53, 318, SYSCALL: run the ISR
-371, 318, transfer data
-689, 161, check for errors
-850, 2, IRET and context restored
-852, 30, CPU execution
-882, 1, check priority of interrupt
-883, 1, check if masked
-884, 1, switch to kernel mode and context saved
-885, 1, find vector 20 in memory position 0x0028
-886, 1, load address 0X07B7 into the PC
-887, 145, END_IO
-1032, 3, IRET and context restored
-1035, 40, CPU execution
-1075, 3, switch to kernel mode and context saved
+50, 2, switch to kernel mode and context saved
+52, 1, find vector 7 in memory position 0x000e
+53, 1, load address 0X00BD into the PC
+54, 318, SYSCALL: run the ISR
+372, 318, transfer data
+690, 160, check for errors
+850, 3, IRET and context restored
+853, 30, CPU execution
+883, 1, check priority of interrupt
+884, 1, check if masked
+885, 3, switch to kernel mode and context saved
+888, 1, find vector 20 in memory position 0x0028
+889, 1, load address 0X07B7 into the PC
+890, 143, END_IO
+1033, 3, IRET and context restored
+1036, 40, CPU execution
+1076, 2, switch to kernel mode and context saved
 1078, 1, find vector 12 in memory position 0x0018
 1079, 1, load address 0X03B9 into the PC
 1080, 382, SYSCALL: run the ISR
 1462, 382, transfer data
-1844, 191, check for errors
-2035, 1, IRET and context restored
-2036, 60, CPU execution
-2096, 1, check priority of interrupt
-2097, 1, check if masked
-2098, 2, switch to kernel mode and context saved
-2100, 1, find vector 22 in memory position 0x002C
-2101, 1, load address 0X03B7 into the PC
-2102, 174, END_IO
-2276, 1, IRET and context restored
-2277, 70, CPU execution
-2347, 3, switch to kernel mode and context saved
-2350, 1, find vector 5 in memory position 0x000A
-2351, 1, load address 0X048B into the PC
-2352, 350, SYSCALL: run the ISR
-2702, 350, transfer data
-3052, 175, check for errors
-3227, 1, IRET and context restored
-3228, 45, CPU execution
-3273, 1, check priority of interrupt
-3274, 1, check if masked
-3275, 2, switch to kernel mode and context saved
-3277, 1, find vector 18 in memory position 0x0024
-3278, 1, load address 0X060A into the PC
-3279, 154, END_IO
-3433, 1, IRET and context restored
+1844, 192, check for errors
+2036, 2, IRET and context restored
+2038, 60, CPU execution
+2098, 1, check priority of interrupt
+2099, 1, check if masked
+2100, 1, switch to kernel mode and context saved
+2101, 1, find vector 22 in memory position 0x002C
+2102, 1, load address 0X03B7 into the PC
+2103, 175, END_IO
+2278, 2, IRET and context restored
+2280, 70, CPU execution
+2350, 1, switch to kernel mode and context saved
+2351, 1, find vector 5 in memory position 0x000A
+2352, 1, load address 0X048B into the PC
+2353, 350, SYSCALL: run the ISR
+2703, 350, transfer data
+3053, 177, check for errors
+3230, 2, IRET and context restored
+3232, 45, CPU execution
+3277, 1, check priority of interrupt
+3278, 1, check if masked
+3279, 3, switch to kernel mode and context saved
+3282, 1, find vector 18 in memory position 0x0024
+3283, 1, load address 0X060A into the PC
+3284, 153, END_IO
+3437, 1, IRET and context restored
 
 Performance Metrics:
-Total Execution Time: 3434
+Total Execution Time: 3438
 Total Context Switches: 6
 Total ISR Executions: 6
 Time Spent on Vector Table Lookups: 6
 Time Spent in Interrupt Handling: 2050
 Time Spent in CPU Operations: 295
 Time Spent in I/O Operations: 1050
-Total Context Switch Time: 21
-Total Syscall Time: 2644
+Total Context Switch Time: 25
+Total Syscall Time: 2647
 Total ISR Execution Time: 3100
-CPU Utilization: 8.59%
+CPU Utilization: 8.58%
 Average I/O Response Time: 0.00
 Ratio of CPU to I/O Time: 0.28
 System Throughput: 0.00 ISRs per time unit
+Number of I/O Operations: 0
+Average Syscall Time: 441.17
+Average ISR Execution Time: 516.67
 min_context_time: 1
 max_context_time: 3
