@@ -1,0 +1,21 @@
+
+Performance Metrics:
+Total Execution Time: 0
+Total Context Switches: 0
+Total ISR Executions: 0
+Time Spent on Vector Table Lookups: 0
+Time Spent in Interrupt Handling: 0
+Time Spent in CPU Operations: 0
+Time Spent in I/O Operations: 0
+Total Context Switch Time: 0
+Total Syscall Time: 0
+Total ISR Execution Time: 0
+CPU Utilization: -nan%
+Average I/O Response Time: 0.00
+Ratio of CPU to I/O Time: -nan
+System Throughput: -nan ISRs per time unit
+Number of I/O Operations: 0
+Average Syscall Time: -nan
+Average ISR Execution Time: -nan
+min_context_time: 1
+max_context_time: 3
