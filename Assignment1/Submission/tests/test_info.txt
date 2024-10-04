@@ -1,0 +1,14 @@
+Varying ISR Execution Times: /tests/isr
+Tests with progressively longer ISR execution times to observe the impact on overall performance.
+
+Varying Context Save/Restore Times: /tests/context_switch
+For each test, the random range for context save/restore times increases (e.g., 1-3ms, 3-5ms, 5-10ms, 10-20ms).
+
+CPU-Intensive vs I/O-Intensive: /tests/cpu_io
+Tests that are heavily CPU-bound and others that are I/O-bound.
+
+Frequent vs Infrequent Interrupts: /tests/interrupts
+Tests with many short interrupts and others with fewer, longer interrupts.
+
+CPU Speed: /tests/cpu_speed
+Simulate faster CPU speeds by reducing all CPU execution times by half each test case.

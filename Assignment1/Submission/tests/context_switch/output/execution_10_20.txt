@@ -1,0 +1,69 @@
+0, 50, CPU execution
+50, 10, switch to kernel mode and context saved
+60, 1, find vector 7 in memory position 0x000e
+61, 1, load address 0X0218 into the PC
+62, 35, SYSCALL: run the ISR
+97, 35, transfer data
+132, 18, check for errors
+150, 16, IRET and context restored
+166, 30, CPU execution
+196, 1, check priority of interrupt
+197, 1, check if masked
+198, 14, switch to kernel mode and context saved
+212, 1, find vector 20 in memory position 0x0028
+213, 1, load address 0X0531 into the PC
+214, 132, END_IO
+346, 14, IRET and context restored
+360, 40, CPU execution
+400, 18, switch to kernel mode and context saved
+418, 1, find vector 12 in memory position 0x0018
+419, 1, load address 0X064A into the PC
+420, 40, SYSCALL: run the ISR
+460, 40, transfer data
+500, 20, check for errors
+520, 18, IRET and context restored
+538, 60, CPU execution
+598, 1, check priority of interrupt
+599, 1, check if masked
+600, 10, switch to kernel mode and context saved
+610, 1, find vector 22 in memory position 0x002C
+611, 1, load address 0X0620 into the PC
+612, 166, END_IO
+778, 19, IRET and context restored
+797, 70, CPU execution
+867, 14, switch to kernel mode and context saved
+881, 1, find vector 5 in memory position 0x000A
+882, 1, load address 0X0642 into the PC
+883, 37, SYSCALL: run the ISR
+920, 37, transfer data
+957, 20, check for errors
+977, 13, IRET and context restored
+990, 45, CPU execution
+1035, 1, check priority of interrupt
+1036, 1, check if masked
+1037, 14, switch to kernel mode and context saved
+1051, 1, find vector 18 in memory position 0x0024
+1052, 1, load address 0X054B into the PC
+1053, 142, END_IO
+1195, 11, IRET and context restored
+
+Performance Metrics:
+Total Execution Time: 1206
+Total Context Switches: 6
+Total ISR Executions: 6
+Time Spent on Vector Table Lookups: 6
+Time Spent in Interrupt Handling: 610
+Time Spent in CPU Operations: 295
+Time Spent in I/O Operations: 112
+Total Context Switch Time: 171
+Total Syscall Time: 377
+Total ISR Execution Time: 722
+CPU Utilization: 24.46%
+Average I/O Response Time: 0.00
+Ratio of CPU to I/O Time: 2.63
+System Throughput: 0.00 ISRs per time unit
+Number of I/O Operations: 0
+Average Syscall Time: 62.83
+Average ISR Execution Time: 120.33
+min_context_time: 10
+max_context_time: 20
