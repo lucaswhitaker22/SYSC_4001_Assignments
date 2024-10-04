@@ -1,0 +1,8 @@
+Lucas Whitaker
+- Designed/wrote the interrupt simulator
+- Designed some test cases
+- Compiled results into final report
+
+Muhammad Maahir Abdul Aziz
+- Writing all answers for part 1, reviewed together
+- writing some test cases, and reviewed and discussed design ideas for simulator, metrics, data structures and discussing how to implement the vector table
