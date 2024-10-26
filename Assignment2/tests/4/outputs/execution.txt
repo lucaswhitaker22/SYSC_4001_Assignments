@@ -2,33 +2,33 @@
 1, 3, context saved
 4, 1, find vector 2 in memory position 0x0008
 5, 1, load address 0X0695 into the PC
-6, 6, FORK: copy parent PCB to child PCB
-12, 3, scheduler called
-15, 1, IRET
-16, 1, switch to kernel mode
-17, 3, context saved
-20, 1, find vector 3 in memory position 0x000c
-21, 1, load address 0X042B into the PC
-22, 4, EXEC: load program1 of size 30Mb
-26, 3, found partition 1 with 40Mb of space
-29, 10, partition 1 marked as occupied
-39, 7, updating PCB with new information
-46, 1, scheduler called
-47, 1, IRET
-48, 1, switch to kernel mode
-49, 3, context saved
-52, 1, find vector 2 in memory position 0x0008
-53, 1, load address 0X0695 into the PC
-54, 9, FORK: copy parent PCB to child PCB
-63, 10, scheduler called
-73, 1, IRET
-74, 1, switch to kernel mode
-75, 3, context saved
-78, 1, find vector 3 in memory position 0x000c
-79, 1, load address 0X042B into the PC
-80, 7, EXEC: load program2 of size 25Mb
-87, 8, found partition 2 with 25Mb of space
-95, 3, partition 2 marked as occupied
-98, 2, updating PCB with new information
-100, 3, scheduler called
-103, 1, IRET
+6, 8, FORK: copy parent PCB to child PCB
+14, 8, scheduler called
+22, 1, IRET
+23, 1, switch to kernel mode
+24, 3, context saved
+27, 1, find vector 3 in memory position 0x000c
+28, 1, load address 0X042B into the PC
+29, 8, EXEC: load program1 of size 30Mb
+37, 5, found partition 1 with 40Mb of space
+42, 4, partition 1 marked as occupied
+46, 3, updating PCB with new information
+49, 7, scheduler called
+56, 1, IRET
+57, 1, switch to kernel mode
+58, 3, context saved
+61, 1, find vector 2 in memory position 0x0008
+62, 1, load address 0X0695 into the PC
+63, 4, FORK: copy parent PCB to child PCB
+67, 4, scheduler called
+71, 1, IRET
+72, 1, switch to kernel mode
+73, 3, context saved
+76, 1, find vector 3 in memory position 0x000c
+77, 1, load address 0X042B into the PC
+78, 10, EXEC: load program2 of size 25Mb
+88, 6, found partition 2 with 25Mb of space
+94, 1, partition 2 marked as occupied
+95, 3, updating PCB with new information
+98, 9, scheduler called
+107, 1, IRET

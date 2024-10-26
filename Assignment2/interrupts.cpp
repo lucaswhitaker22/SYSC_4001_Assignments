@@ -127,7 +127,7 @@ void simulate_syscall(int vector_num) {
 }
 
 void save_system_status(const std::string& output_file_path) {
-    std::ofstream output_file(output_file_path, std::ios::trunc);
+    std::ofstream output_file(output_file_path, std::ios::app);
     if (!output_file.is_open()) {
         std::cerr << "Error opening file for writing: " << output_file_path << " - " << strerror(errno) << std::endl;
         return;
@@ -287,23 +287,31 @@ int main(int argc, char** argv) {
             return 1;
         }
     }
+    // Delete existing output files if they exist
+    std::string system_status_file = output_directory + "/system_status.txt";
+    std::string execution_file = output_directory + "/execution.txt";
+    
+    if (std::remove(system_status_file.c_str()) == 0) {
+        std::cout << "Deleted existing system_status.txt" << std::endl;
+    }
+    if (std::remove(execution_file.c_str()) == 0) {
+        std::cout << "Deleted existing execution.txt" << std::endl;
+    }
 
     load_external_files(input_directory + "/external_files.txt");
     load_vector_table(input_directory + "/vector_table.txt");
     init_pcb();
 
-    save_system_status(output_directory + "/system_status.txt");
+    save_system_status(system_status_file);
     process_trace(input_directory + "/trace.txt", output_directory);
 
-    std::ofstream execution_file(output_directory + "/execution.txt", std::ios::out);
-    if (!execution_file.is_open()) {
-        std::cerr << "Error opening file for writing: " << output_directory + "/execution.txt" << " - " << strerror(errno) << std::endl;
+    std::ofstream execution_output(execution_file);
+    if (!execution_output.is_open()) {
+        std::cerr << "Error opening file for writing: " << execution_file << " - " << strerror(errno) << std::endl;
         return 1;
     }
-    execution_file << execution_log;
-    execution_file.close();
-
-    save_system_status(output_directory + "/system_status.txt");
+    execution_output << execution_log;
+    execution_output.close();
 
     std::cout << "Output generated in " << output_directory << std::endl;
     return 0;
