@@ -107,6 +107,8 @@
     "typeinfo": "cpp",
     "map": "cpp",
     "filesystem": "cpp",
-    "codecvt": "cpp"
+    "codecvt": "cpp",
+    "cstring": "cpp",
+    "cinttypes": "cpp"
   }
 }

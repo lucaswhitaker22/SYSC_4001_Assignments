@@ -1,287 +1,310 @@
-#include "interrupts.hpp"
+#include <sys/stat.h>
+#include <fstream>
+#include <iostream>
+#include <random>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <map>
+#include <algorithm>
+#include <cstring>
+#include <cerrno>
+#include <iomanip>
 
-// Global variables
-std::vector<MemoryPartition> memoryPartitions = {
-    {40, false, -1}, {25, false, -1}, {15, false, -1},
-    {10, false, -1}, {8, false, -1}, {2, true, 0}
+const int ADDR_BASE = 0x0000;
+const int VECTOR_SIZE = 4;
+
+struct MemoryPartition {
+    unsigned int number;
+    unsigned int size;
+    std::string code;
 };
-std::vector<PCB> pcbTable;
-std::deque<PCB*> readyQueue;
-std::vector<ExternalFile> externalFiles;
-std::map<int, std::string> vectorTable;
-int currentPid = -1;
+
+struct PCB {
+    unsigned int pid;
+    std::string name;
+    unsigned int partition;
+    unsigned int size;
+    unsigned int remaining_cpu_time;
+    std::string state;
+};
+
+struct ExternalFile {
+    std::string name;
+    unsigned int size;
+};
+
+std::vector<MemoryPartition> memory_partitions = {
+    {1, 40, "free"}, {2, 25, "free"}, {3, 15, "free"},
+    {4, 10, "free"}, {5, 8, "free"}, {6, 2, "init"}
+};
+
+std::vector<PCB> pcb_table;
+std::vector<ExternalFile> external_files;
+std::map<int, std::string> vector_table;
+
+unsigned int current_pid = 11;
+int current_time = 0;
+
 std::random_device rd;
 std::mt19937 rng(rd());
-std::uniform_int_distribution<> isrTimeDist(1, 10);
+std::uniform_int_distribution<> exec_time_distr(1, 10);
 
-// Function declarations
-void logActivity(int& currentTime, int duration, const std::string& activity, const std::string& outputDir) {
-    std::ofstream log_file(outputDir + "/execution.txt", std::ios::app);
-    log_file << currentTime << ", " << duration << ", " << activity << "\n";
-    currentTime += duration;
-}
+std::string execution_log;
 
 std::vector<std::string> split_delim(const std::string& s, const std::string& delimiter) {
-    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
-    std::string token;
-    std::vector<std::string> res;
-
-    while ((pos_end = s.find(delimiter, pos_start)) != std::string::npos) {
-        token = s.substr(pos_start, pos_end - pos_start);
-        pos_start = pos_end + delim_len;
-        res.push_back(token);
+    std::vector<std::string> tokens;
+    size_t last = 0;
+    size_t next = 0;
+    while ((next = s.find(delimiter, last)) != std::string::npos) {
+        tokens.push_back(s.substr(last, next - last));
+        last = next + 1;
     }
-
-    res.push_back(s.substr(pos_start));
-    return res;
+    tokens.push_back(s.substr(last));
+    return tokens;
 }
 
-void loadExternalFiles(const std::string& inputDir) {
-    std::ifstream file(inputDir + "/external_files.txt");
+void load_external_files(const std::string& file_path) {
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << file_path << " - " << strerror(errno) << std::endl;
+        return;
+    }
     std::string line;
     while (std::getline(file, line)) {
         auto parts = split_delim(line, ",");
-        externalFiles.push_back({parts[0], std::stoi(parts[1])});
+        if (parts.size() != 2) {
+            std::cerr << "Invalid line in external_files.txt: " << line << std::endl;
+            continue;
+        }
+        try {
+            external_files.push_back({parts[0], static_cast<unsigned int>(std::stoi(parts[1]))});
+        } catch (const std::exception& e) {
+            std::cerr << "Error parsing line in external_files.txt: " << line << " - " << e.what() << std::endl;
+        }
     }
 }
 
-void loadVectorTable(const std::string& inputDir) {
-    std::ifstream file(inputDir + "/vector_table.txt");
+void load_vector_table(const std::string& file_path) {
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << file_path << " - " << strerror(errno) << std::endl;
+        return;
+    }
     std::string line;
-    int index = 0;
+    int vector_num = 0;
     while (std::getline(file, line)) {
-        vectorTable[index] = line;
-        index++;
+        try {
+            vector_table[vector_num] = line;
+            vector_num++;
+        } catch (const std::exception& e) {
+            std::cerr << "Error parsing line in vector_table.txt: " << line << " - " << e.what() << std::endl;
+        }
     }
 }
 
-void saveSystemStatus(int currentTime, const std::string& outputDir) {
-    std::ofstream status_file(outputDir + "/system_status.txt", std::ios::app);
-    status_file << "!-----------------------------------------------------------!\n";
-    status_file << "Save Time: " << currentTime << " ms\n";
-    status_file << "+--------------------------------------------+\n";
-    status_file << "| PID |Program Name |Partition Number | size |\n";
-    status_file << "+--------------------------------------------+\n";
-    for (const auto& pcb : pcbTable) {
-        status_file << "| " << std::setw(3) << pcb.pid << " | " 
-                    << std::setw(11) << pcb.programName << " | " 
-                    << std::setw(15) << pcb.partitionNumber << " | " 
-                    << std::setw(4) << pcb.size << " |\n";
-    }
-    status_file << "+--------------------------------------------+\n";
-    status_file << "!-----------------------------------------------------------\n\n";
+void init_pcb() {
+    pcb_table.push_back({current_pid++, "init", 6, 1, 0, "Ready"});
 }
 
-int findBestFitPartition(int size) {
-    int bestFitIndex = -1;
-    int smallestDifference = std::numeric_limits<int>::max();
-    for (size_t i = 0; i < memoryPartitions.size(); ++i) {
-        if (!memoryPartitions[i].occupied && memoryPartitions[i].size >= size) {
-            int difference = memoryPartitions[i].size - size;
-            if (difference < smallestDifference) {
-                smallestDifference = difference;
-                bestFitIndex = static_cast<int>(i);
+void log_step(const std::string& step, int duration) {
+    execution_log += std::to_string(current_time) + ", " + std::to_string(duration) + ", " + step + "\n";
+    current_time += duration;
+}
+
+void simulate_syscall(int vector_num) {
+    log_step("switch to kernel mode", 1);
+    log_step("context saved", 3);
+    std::stringstream ss;
+    ss << "find vector " << vector_num << " in memory position 0x" 
+       << std::setfill('0') << std::setw(4) << std::hex << (ADDR_BASE + (vector_num * VECTOR_SIZE));
+    log_step(ss.str(), 1);
+    if (vector_table.find(vector_num) == vector_table.end()) {
+        std::cerr << "Error: Vector " << vector_num << " not found in vector table" << std::endl;
+        return;
+    }
+    log_step("load address " + vector_table[vector_num] + " into the PC", 1);
+}
+
+void save_system_status(const std::string& output_file_path) {
+    std::ofstream output_file(output_file_path, std::ios::trunc);
+    if (!output_file.is_open()) {
+        std::cerr << "Error opening file for writing: " << output_file_path << " - " << strerror(errno) << std::endl;
+        return;
+    }
+    output_file << "!-----------------------------------------------------------!\n";
+    output_file << "Save Time: " << current_time << " ms\n";
+    output_file << "+--------------------------------------------+\n";
+    output_file << "| PID |Program Name |Partition Number | size |\n";
+    output_file << "+--------------------------------------------+\n";
+    for (const auto& pcb : pcb_table) {
+        output_file << "| " << std::setw(3) << pcb.pid << " | " 
+                    << std::setw(11) << std::left << pcb.name << " | " 
+                    << std::setw(16) << std::left << pcb.partition << " | " 
+                    << std::setw(4) << std::left << pcb.size << " |\n";
+    }
+    output_file << "+--------------------------------------------+\n";
+    output_file << "!-----------------------------------------------------------!\n\n";
+}
+
+void simulate_fork(const std::string& output_directory) {
+    simulate_syscall(2);
+    int duration = exec_time_distr(rng);
+    log_step("FORK: copy parent PCB to child PCB", duration);
+    
+    if (pcb_table.empty()) {
+        std::cerr << "Error: PCB table is empty" << std::endl;
+        return;
+    }
+    PCB parent = pcb_table.back();
+    PCB child = parent;
+    child.pid = current_pid++;
+    child.state = "Ready";
+    pcb_table.push_back(child);
+
+    log_step("scheduler called", exec_time_distr(rng));
+    log_step("IRET", 1);
+    
+    save_system_status(output_directory + "/system_status.txt");
+}
+
+void simulate_exec(const std::string& program_name, const std::string& output_directory) {
+    simulate_syscall(3);
+    
+    auto it = std::find_if(external_files.begin(), external_files.end(),
+                           [&](const ExternalFile& ef) { return ef.name == program_name; });
+    if (it == external_files.end()) {
+        std::cerr << "Program not found: " << program_name << std::endl;
+        return;
+    }
+
+    unsigned int program_size = it->size;
+    log_step("EXEC: load " + program_name + " of size " + std::to_string(program_size) + "Mb", exec_time_distr(rng));
+
+    auto partition_it = std::min_element(memory_partitions.begin(), memory_partitions.end(),
+                                         [&](const MemoryPartition& a, const MemoryPartition& b) {
+                                             return (a.code == "free" && a.size >= program_size && a.size < b.size) ||
+                                                    (b.code != "free" || b.size < program_size);
+                                         });
+    if (partition_it == memory_partitions.end() || partition_it->code != "free" || partition_it->size < program_size) {
+        std::cerr << "No suitable partition found for " << program_name << std::endl;
+        return;
+    }
+
+    log_step("found partition " + std::to_string(partition_it->number) + " with " + std::to_string(partition_it->size) + "Mb of space", exec_time_distr(rng));
+    log_step("partition " + std::to_string(partition_it->number) + " marked as occupied", exec_time_distr(rng));
+
+    partition_it->code = program_name;
+    
+    if (pcb_table.empty()) {
+        std::cerr << "Error: PCB table is empty" << std::endl;
+        return;
+    }
+    PCB& current_pcb = pcb_table.back();
+    current_pcb.name = program_name;
+    current_pcb.partition = partition_it->number;
+    current_pcb.size = program_size;
+
+    log_step("updating PCB with new information", exec_time_distr(rng));
+    log_step("scheduler called", exec_time_distr(rng));
+    log_step("IRET", 1);
+    
+    save_system_status(output_directory + "/system_status.txt");
+}
+
+void simulate_cpu(int duration) {
+    log_step("CPU", duration);
+}
+
+void simulate_syscall(int syscall_num, int duration) {
+    simulate_syscall(syscall_num);
+    log_step(std::to_string(syscall_num) + " ISR execution", duration / 3);
+    log_step("transfer data", (duration * 2) / 3);
+    log_step("check for errors", exec_time_distr(rng));
+    log_step("IRET", 1);
+}
+
+void process_trace(const std::string& trace_file_path, const std::string& output_directory) {
+    std::ifstream trace_file(trace_file_path);
+    if (!trace_file.is_open()) {
+        std::cerr << "Error opening file: " << trace_file_path << " - " << strerror(errno) << std::endl;
+        return;
+    }
+    std::string line;
+    while (std::getline(trace_file, line)) {
+        auto parts = split_delim(line, ",");
+        if (parts.empty()) {
+            std::cerr << "Invalid line in trace file: " << line << std::endl;
+            continue;
+        }
+        if (parts[0] == "FORK") {
+            simulate_fork(output_directory);
+        } else if (parts[0].substr(0, 4) == "EXEC") {
+            auto exec_parts = split_delim(parts[0], " ");
+            if (exec_parts.size() < 2) {
+                std::cerr << "Invalid EXEC command: " << parts[0] << std::endl;
+                continue;
             }
+            simulate_exec(exec_parts[1], output_directory);
+        } else if (parts[0] == "CPU") {
+            if (parts.size() < 2) {
+                std::cerr << "Invalid CPU command: " << line << std::endl;
+                continue;
+            }
+            try {
+                simulate_cpu(std::stoi(parts[1]));
+            } catch (const std::exception& e) {
+                std::cerr << "Error parsing CPU duration: " << parts[1] << " - " << e.what() << std::endl;
+            }
+        } else if (parts[0].substr(0, 7) == "SYSCALL") {
+            auto syscall_parts = split_delim(parts[0], " ");
+            if (syscall_parts.size() < 2 || parts.size() < 2) {
+                std::cerr << "Invalid SYSCALL command: " << line << std::endl;
+                continue;
+            }
+            try {
+                simulate_syscall(std::stoi(syscall_parts[1]), std::stoi(parts[1]));
+            } catch (const std::exception& e) {
+                std::cerr << "Error parsing SYSCALL: " << line << " - " << e.what() << std::endl;
+            }
+        } else {
+            std::cerr << "Unknown command in trace file: " << parts[0] << std::endl;
         }
     }
-    return bestFitIndex;
-}
-
-void scheduler(int& currentTime, const std::string& outputDir) {
-    logActivity(currentTime, 2, "scheduler called", outputDir);
-}
-
-void syscall(int syscallNumber, int& currentTime, const std::string& outputDir) {
-    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
-    logActivity(currentTime, 1, "context saved", outputDir);
-    logActivity(currentTime, 1, "find vector " + std::to_string(syscallNumber) + " in memory position 0x000" + std::to_string(syscallNumber * 2), outputDir);
-    logActivity(currentTime, 1, "load address " + vectorTable[syscallNumber] + " into the PC", outputDir);
-    logActivity(currentTime, 38, "SYSCALL: run the ISR", outputDir);
-    logActivity(currentTime, 74, "transfer data", outputDir);
-    logActivity(currentTime, 13, "check for errors", outputDir);
-    logActivity(currentTime, 1, "IRET", outputDir);
-}
-
-std::vector<std::string> readProgramFile(const std::string& inputDir, const std::string& programName) {
-    std::vector<std::string> instructions;
-    std::ifstream file(inputDir + "/" + programName + ".txt");
-    if (!file) {
-        std::cerr << "Error: Unable to open " << programName << ".txt" << std::endl;
-        return instructions;
-    }
-    
-    std::string line;
-    while (std::getline(file, line)) {
-        instructions.push_back(line);
-    }
-    return instructions;
-}
-
-
-void executeProcess(PCB& process, int& currentTime, const std::string& inputDir) {
-    process.state = "RUNNING";
-    std::vector<std::string> instructions = readProgramFile(inputDir, process.programName);
-    
-    for (const auto& instruction : instructions) {
-        auto parts = split_delim(instruction, ",");
-        auto activity = parts[0];
-        auto duration = std::stoi(parts[1]);
-
-        if (activity == "CPU") {
-            process.remainingCpuTime = duration;
-            process.cpuTime += duration;
-            logActivity(currentTime, duration, "CPU execution", inputDir+"/outputs");
-        } else if (activity.substr(0, 7) == "SYSCALL") {
-            int syscallNumber = std::stoi(split_delim(activity, " ")[1]);
-            process.ioTime += duration;
-            syscall(syscallNumber, currentTime, inputDir+"/outputs");
-        } else if (activity == "END_IO") {
-            process.ioTime += duration;
-            logActivity(currentTime, duration, "End I/O operation", inputDir+"/outputs");
-        }
-    }
-
-    process.state = "TERMINATED";
-    memoryPartitions[process.partitionNumber - 1].occupied = false;
-}
-
-void initializeSystem() {
-    PCB initProcess = {
-        ++currentPid,  // Will be 0
-        "init",     
-        6,          // Partition 6 (2MB)
-        1,          // Size 1MB
-        "READY",    
-        0,          // cpuTime
-        0,          // ioTime
-        0,          // remainingCpuTime
-        {},         // instructions
-        0,          // currentInstruction
-        false       // isChild
-    };
-    pcbTable.push_back(initProcess);
-    readyQueue.push_back(&pcbTable.back());
-}
-
-void fork(int& currentTime, const std::string& outputDir) {
-    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
-    logActivity(currentTime, 3, "context saved", outputDir);
-    logActivity(currentTime, 1, "find vector 2 in memory position 0x0004", outputDir);
-    logActivity(currentTime, 1, "load address " + vectorTable[2] + " into the PC", outputDir);
-    logActivity(currentTime, 8, "FORK: copy parent PCB to child PCB", outputDir);
-
-    PCB childProcess = pcbTable.back();
-    childProcess.pid = ++currentPid;
-    childProcess.isChild = true;
-    childProcess.state = "READY";
-    pcbTable.push_back(childProcess);
-    readyQueue.push_front(&pcbTable.back());
-
-    logActivity(currentTime, 2, "scheduler called", outputDir);
-    logActivity(currentTime, 1, "IRET", outputDir);
-}
-
-void exec(const std::string& fileName, int& currentTime, const std::string& outputDir) {
-    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
-    logActivity(currentTime, 3, "context saved", outputDir);
-    logActivity(currentTime, 1, "find vector 3 in memory position 0x0006", outputDir);
-    logActivity(currentTime, 1, "load address " + vectorTable[3] + " into the PC", outputDir);
-
-    auto it = std::find_if(externalFiles.begin(), externalFiles.end(),
-                           [&fileName](const ExternalFile& ef) { return ef.name == fileName; });
-    if (it == externalFiles.end()) {
-        logActivity(currentTime, 1, "Exec failed: File not found", outputDir);
-        return;
-    }
-
-    int fileSize = it->size;
-    int loadTime = (fileName == "program1") ? 30 : 5;
-    logActivity(currentTime, loadTime, "EXEC: load " + fileName + " of size " + std::to_string(fileSize) + "Mb", outputDir);
-
-    int partitionIndex = findBestFitPartition(fileSize);
-    if (partitionIndex == -1) {
-        logActivity(currentTime, 1, "Exec failed: No suitable partition", outputDir);
-        return;
-    }
-
-    logActivity(currentTime, 10, "found partition " + std::to_string(partitionIndex + 1) + 
-                " with " + std::to_string(memoryPartitions[partitionIndex].size) + "Mb of space", outputDir);
-    logActivity(currentTime, 6, "partition " + std::to_string(partitionIndex + 1) + " marked as occupied", outputDir);
-
-    PCB& currentProcess = pcbTable.back();
-    currentProcess.programName = fileName;
-    currentProcess.partitionNumber = partitionIndex + 1;
-    currentProcess.size = fileSize;
-    memoryPartitions[partitionIndex].occupied = true;
-    memoryPartitions[partitionIndex].processId = currentProcess.pid;
-
-    logActivity(currentTime, 2, "updating PCB with new information", outputDir);
-    scheduler(currentTime, outputDir);
-    logActivity(currentTime, 1, "IRET", outputDir);
-}
-
-bool fileExists(const std::string& filename) {
-    std::ifstream file(filename);
-    return file.good();
-}
-
-void printUsage(const char* programName) {
-    std::cerr << "Usage: " << programName << " <input_directory>" << std::endl;
 }
 
 int main(int argc, char** argv) {
     if (argc != 2) {
-        printUsage(argv[0]);
+        std::cerr << "Usage: " << argv[0] << " <PATH TO INPUT DIRECTORY>" << std::endl;
         return 1;
     }
 
-    std::string inputDir = argv[1];
-
-
-
-    // Create the "outputs" folder if it doesn't exist
-    std::string outputDir = inputDir + "/outputs";
-    if (mkdir(outputDir.c_str(), 0777) == -1) {
+    std::string input_directory(argv[1]);
+    std::string output_directory = input_directory + "/outputs";
+    if (mkdir(output_directory.c_str(), 0777) == -1) {
         if (errno != EEXIST) {
-            std::cerr << "Error creating output directory: " << errno << std::endl;
+            std::cerr << "Failed to create output directory: " << output_directory << " - " << strerror(errno) << std::endl;
             return 1;
         }
     }
 
-    // Clear existing output files
-    std::ofstream clear_exec(outputDir + "/execution.txt", std::ios::trunc);
-    clear_exec.close();
-    std::ofstream clear_status(outputDir + "/system_status.txt", std::ios::trunc);
-    clear_status.close();
+    load_external_files(input_directory + "/external_files.txt");
+    load_vector_table(input_directory + "/vector_table.txt");
+    init_pcb();
 
+    save_system_status(output_directory + "/system_status.txt");
+    process_trace(input_directory + "/trace.txt", output_directory);
 
-    initializeSystem();
-    loadVectorTable(inputDir);
-    loadExternalFiles(inputDir);
+    std::ofstream execution_file(output_directory + "/execution.txt", std::ios::out);
+    if (!execution_file.is_open()) {
+        std::cerr << "Error opening file for writing: " << output_directory + "/execution.txt" << " - " << strerror(errno) << std::endl;
+        return 1;
+    }
+    execution_file << execution_log;
+    execution_file.close();
 
-    std::ifstream input_file(inputDir + "/trace.txt");
-    std::string trace;
-    int current_time = 0;
-    while(std::getline(input_file, trace)) {
-            auto parts = split_delim(trace, ",");
-            auto activity = parts[0];
+    save_system_status(output_directory + "/system_status.txt");
 
-            if (activity == "FORK") {
-                fork(current_time, outputDir);
-                saveSystemStatus(current_time, outputDir);
-            } else if (activity.substr(0, 4) == "EXEC") {
-                std::string programName = split_delim(activity, " ")[1];
-                exec(programName, current_time, outputDir);
-                saveSystemStatus(current_time, outputDir);
-                
-                // Execute program instructions
-                if (!pcbTable.empty()) {
-                    PCB& currentProcess = pcbTable.back();
-                    executeProcess(currentProcess, current_time, inputDir);
-                    saveSystemStatus(current_time, outputDir);
-                }
-            }
-        }
-
+    std::cout << "Output generated in " << output_directory << std::endl;
     return 0;
 }
