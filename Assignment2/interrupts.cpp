@@ -1,45 +1,4 @@
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <random>
-#include <algorithm>
-#include <sstream>
-#include <iomanip>
-#include <map>
-#include <queue>
-#include <deque>
-
-// Constants
-const int ADDR_BASE = 0x0000;
-const int VECTOR_SIZE = 2;
-
-// Structures
-struct MemoryPartition {
-    int size;
-    bool occupied;
-    int processId;
-};
-
-struct PCB {
-    int pid;
-    std::string programName;
-    int partitionNumber;
-    int size;
-    std::string state;
-    int cpuTime;
-    int ioTime;
-    int remainingCpuTime;
-    std::vector<std::string> instructions;
-    size_t currentInstruction;
-    bool isChild;
-};
-
-struct ExternalFile {
-    std::string name;
-    int size;
-};
-
+#include "interrupts.hpp"
 // Global variables
 std::vector<MemoryPartition> memoryPartitions = {
     {40, false, -1}, {25, false, -1}, {15, false, -1},
@@ -76,8 +35,8 @@ std::vector<std::string> split_delim(const std::string& s, const std::string& de
     return res;
 }
 
-void loadExternalFiles(const std::string& filename) {
-    std::ifstream file(filename);
+void loadExternalFiles(const std::string& inputDir) {
+    std::ifstream file(inputDir + "/external_files.txt");
     std::string line;
     while (std::getline(file, line)) {
         auto parts = split_delim(line, ",");
@@ -85,8 +44,8 @@ void loadExternalFiles(const std::string& filename) {
     }
 }
 
-void loadVectorTable(const std::string& filename) {
-    std::ifstream file(filename);
+void loadVectorTable(const std::string& inputDir) {
+    std::ifstream file(inputDir + "/vector_table.txt");
     std::string line;
     int index = 0;
     while (std::getline(file, line)) {
@@ -131,7 +90,7 @@ void scheduler(int& currentTime) {
     logActivity(currentTime, 2, "scheduler called");
 }
 
-void syscall(int syscallNumber, int duration, int& currentTime) {
+void syscall(int syscallNumber, int& currentTime) {
     logActivity(currentTime, 1, "switch to kernel mode");
     logActivity(currentTime, 1, "context saved");
     logActivity(currentTime, 1, "find vector " + std::to_string(syscallNumber) + " in memory position 0x000" + std::to_string(syscallNumber * 2));
@@ -142,9 +101,9 @@ void syscall(int syscallNumber, int duration, int& currentTime) {
     logActivity(currentTime, 1, "IRET");
 }
 
-std::vector<std::string> readProgramFile(const std::string& programName) {
+std::vector<std::string> readProgramFile(const std::string& inputDir, const std::string& programName) {
     std::vector<std::string> instructions;
-    std::ifstream file("../inputs/"+programName + ".txt");
+    std::ifstream file(inputDir + "/" + programName + ".txt");
     if (!file) {
         std::cerr << "Error: Unable to open " << programName << ".txt" << std::endl;
         return instructions;
@@ -157,9 +116,10 @@ std::vector<std::string> readProgramFile(const std::string& programName) {
     return instructions;
 }
 
-void executeProcess(PCB& process, int& currentTime) {
+
+void executeProcess(PCB& process, int& currentTime, const std::string& inputDir) {
     process.state = "RUNNING";
-    std::vector<std::string> instructions = readProgramFile(process.programName);
+    std::vector<std::string> instructions = readProgramFile(inputDir, process.programName);
     
     for (const auto& instruction : instructions) {
         auto parts = split_delim(instruction, ",");
@@ -173,7 +133,7 @@ void executeProcess(PCB& process, int& currentTime) {
         } else if (activity.substr(0, 7) == "SYSCALL") {
             int syscallNumber = std::stoi(split_delim(activity, " ")[1]);
             process.ioTime += duration;
-            syscall(syscallNumber, duration, currentTime);
+            syscall(syscallNumber, currentTime);
         } else if (activity == "END_IO") {
             process.ioTime += duration;
             logActivity(currentTime, duration, "End I/O operation");
@@ -183,7 +143,6 @@ void executeProcess(PCB& process, int& currentTime) {
     process.state = "TERMINATED";
     memoryPartitions[process.partitionNumber - 1].occupied = false;
 }
-
 
 void initializeSystem() {
     PCB initProcess = {
@@ -215,9 +174,9 @@ void fork(int& currentTime) {
     childProcess.isChild = true;
     childProcess.state = "READY";
     pcbTable.push_back(childProcess);
-    readyQueue.push_front(&pcbTable.back());  // Child gets higher priority
+    readyQueue.push_front(&pcbTable.back());
 
-    scheduler(currentTime);
+    logActivity(currentTime, 2, "scheduler called");
     logActivity(currentTime, 1, "IRET");
 }
 
@@ -266,14 +225,17 @@ bool fileExists(const std::string& filename) {
 }
 
 void printUsage(const char* programName) {
-    std::cerr << "Usage: " << programName << " <vector_table_file> <external_files_file> <trace_file>" << std::endl;
+    std::cerr << "Usage: " << programName << " <input_directory>" << std::endl;
 }
 
 int main(int argc, char** argv) {
-    if (argc != 4) {
+    if (argc != 2) {
         printUsage(argv[0]);
         return 1;
     }
+
+    std::string inputDir = argv[1];
+
 
     // Clear existing output files
     std::ofstream clear_exec("execution.txt", std::ios::trunc);
@@ -282,10 +244,10 @@ int main(int argc, char** argv) {
     clear_status.close();
 
     initializeSystem();
-    loadVectorTable(argv[1]);
-    loadExternalFiles(argv[2]);
+    loadVectorTable(inputDir);
+    loadExternalFiles(inputDir);
 
-    std::ifstream input_file(argv[3]);
+    std::ifstream input_file(inputDir + "/trace.txt");
     std::string trace;
     int current_time = 0;
 
@@ -301,16 +263,11 @@ int main(int argc, char** argv) {
             exec(programName, current_time);
             saveSystemStatus(current_time);
             
-            // Execute all child processes before continuing
-            while (!readyQueue.empty()) {
-                PCB* currentProcess = readyQueue.front();
-                readyQueue.pop_front();
-                if (currentProcess->isChild) {
-                    executeProcess(*currentProcess, current_time);
-                    saveSystemStatus(current_time);
-                } else {
-                    readyQueue.push_back(currentProcess);
-                }
+            // Execute program instructions
+            if (!pcbTable.empty()) {
+                PCB& currentProcess = pcbTable.back();
+                executeProcess(currentProcess, current_time, inputDir);
+                saveSystemStatus(current_time);
             }
         }
     }

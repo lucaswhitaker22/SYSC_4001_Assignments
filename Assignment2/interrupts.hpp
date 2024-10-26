@@ -1,38 +1,64 @@
 #ifndef INTERRUPTS_HPP
 #define INTERRUPTS_HPP
 
-// Standard library includes
 #include <iostream>
 #include <fstream>
+#include <vector>
 #include <string>
 #include <random>
-#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <iomanip>
+#include <map>
+#include <queue>
+#include <deque>
+#include <filesystem>
 
-// Constants for interrupt vector table
-const int ADDR_BASE = 1024;    // Base address for interrupt vector table
-const int VECTOR_SIZE = 4;     // Size of each vector entry in bytes
+// Constants
+const int ADDR_BASE = 0x0000;
+const int VECTOR_SIZE = 2;
 
-/**
- * Splits a string by a delimiter and returns a vector of substrings
- * @param str The string to split
- * @param delimiter The delimiter to split by
- * @return Vector of substrings
- */
-inline std::vector<std::string> split_delim(const std::string& str, const std::string& delimiter) {
-    std::vector<std::string> tokens;
-    size_t prev = 0, pos = 0;
-    
-    do {
-        pos = str.find(delimiter, prev);
-        if (pos == std::string::npos) pos = str.length();
-        
-        std::string token = str.substr(prev, pos - prev);
-        if (!token.empty()) tokens.push_back(token);
-        
-        prev = pos + delimiter.length();
-    } while (pos < str.length() && prev < str.length());
-    
-    return tokens;
-}
+// Structures
+struct MemoryPartition {
+    int size;
+    bool occupied;
+    int processId;
+};
+
+struct PCB {
+    int pid;
+    std::string programName;
+    int partitionNumber;
+    int size;
+    std::string state;
+    int cpuTime;
+    int ioTime;
+    int remainingCpuTime;
+    std::vector<std::string> instructions;
+    size_t currentInstruction;
+    bool isChild;
+};
+
+struct ExternalFile {
+    std::string name;
+    int size;
+};
+
+// Function declarations
+void logActivity(int& currentTime, int duration, const std::string& activity);
+std::vector<std::string> split_delim(const std::string& s, const std::string& delimiter);
+void loadExternalFiles(const std::string& directory);
+void loadVectorTable(const std::string& directory);
+void saveSystemStatus(int currentTime);
+int findBestFitPartition(int size);
+void scheduler(int& currentTime);
+void syscall(int syscallNumber, int& currentTime);
+std::vector<std::string> readProgramFile(const std::string& directory, const std::string& programName);
+void executeProcess(const std::string& directory, PCB& process, int& currentTime);
+void initializeSystem();
+void fork(int& currentTime);
+void exec(const std::string& fileName, int& currentTime);
+bool fileExists(const std::string& filename);
+void printUsage(const char* programName);
 
 #endif // INTERRUPTS_HPP
