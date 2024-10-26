@@ -1,4 +1,5 @@
 #include "interrupts.hpp"
+
 // Global variables
 std::vector<MemoryPartition> memoryPartitions = {
     {40, false, -1}, {25, false, -1}, {15, false, -1},
@@ -14,8 +15,8 @@ std::mt19937 rng(rd());
 std::uniform_int_distribution<> isrTimeDist(1, 10);
 
 // Function declarations
-void logActivity(int& currentTime, int duration, const std::string& activity) {
-    std::ofstream log_file("execution.txt", std::ios::app);
+void logActivity(int& currentTime, int duration, const std::string& activity, const std::string& outputDir) {
+    std::ofstream log_file(outputDir + "/execution.txt", std::ios::app);
     log_file << currentTime << ", " << duration << ", " << activity << "\n";
     currentTime += duration;
 }
@@ -54,8 +55,8 @@ void loadVectorTable(const std::string& inputDir) {
     }
 }
 
-void saveSystemStatus(int currentTime) {
-    std::ofstream status_file("system_status.txt", std::ios::app);
+void saveSystemStatus(int currentTime, const std::string& outputDir) {
+    std::ofstream status_file(outputDir + "/system_status.txt", std::ios::app);
     status_file << "!-----------------------------------------------------------!\n";
     status_file << "Save Time: " << currentTime << " ms\n";
     status_file << "+--------------------------------------------+\n";
@@ -86,19 +87,19 @@ int findBestFitPartition(int size) {
     return bestFitIndex;
 }
 
-void scheduler(int& currentTime) {
-    logActivity(currentTime, 2, "scheduler called");
+void scheduler(int& currentTime, const std::string& outputDir) {
+    logActivity(currentTime, 2, "scheduler called", outputDir);
 }
 
-void syscall(int syscallNumber, int& currentTime) {
-    logActivity(currentTime, 1, "switch to kernel mode");
-    logActivity(currentTime, 1, "context saved");
-    logActivity(currentTime, 1, "find vector " + std::to_string(syscallNumber) + " in memory position 0x000" + std::to_string(syscallNumber * 2));
-    logActivity(currentTime, 1, "load address " + vectorTable[syscallNumber] + " into the PC");
-    logActivity(currentTime, 38, "SYSCALL: run the ISR");
-    logActivity(currentTime, 74, "transfer data");
-    logActivity(currentTime, 13, "check for errors");
-    logActivity(currentTime, 1, "IRET");
+void syscall(int syscallNumber, int& currentTime, const std::string& outputDir) {
+    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
+    logActivity(currentTime, 1, "context saved", outputDir);
+    logActivity(currentTime, 1, "find vector " + std::to_string(syscallNumber) + " in memory position 0x000" + std::to_string(syscallNumber * 2), outputDir);
+    logActivity(currentTime, 1, "load address " + vectorTable[syscallNumber] + " into the PC", outputDir);
+    logActivity(currentTime, 38, "SYSCALL: run the ISR", outputDir);
+    logActivity(currentTime, 74, "transfer data", outputDir);
+    logActivity(currentTime, 13, "check for errors", outputDir);
+    logActivity(currentTime, 1, "IRET", outputDir);
 }
 
 std::vector<std::string> readProgramFile(const std::string& inputDir, const std::string& programName) {
@@ -129,14 +130,14 @@ void executeProcess(PCB& process, int& currentTime, const std::string& inputDir)
         if (activity == "CPU") {
             process.remainingCpuTime = duration;
             process.cpuTime += duration;
-            logActivity(currentTime, duration, "CPU execution");
+            logActivity(currentTime, duration, "CPU execution", inputDir+"/outputs");
         } else if (activity.substr(0, 7) == "SYSCALL") {
             int syscallNumber = std::stoi(split_delim(activity, " ")[1]);
             process.ioTime += duration;
-            syscall(syscallNumber, currentTime);
+            syscall(syscallNumber, currentTime, inputDir+"/outputs");
         } else if (activity == "END_IO") {
             process.ioTime += duration;
-            logActivity(currentTime, duration, "End I/O operation");
+            logActivity(currentTime, duration, "End I/O operation", inputDir+"/outputs");
         }
     }
 
@@ -162,12 +163,12 @@ void initializeSystem() {
     readyQueue.push_back(&pcbTable.back());
 }
 
-void fork(int& currentTime) {
-    logActivity(currentTime, 1, "switch to kernel mode");
-    logActivity(currentTime, 3, "context saved");
-    logActivity(currentTime, 1, "find vector 2 in memory position 0x0004");
-    logActivity(currentTime, 1, "load address " + vectorTable[2] + " into the PC");
-    logActivity(currentTime, 8, "FORK: copy parent PCB to child PCB");
+void fork(int& currentTime, const std::string& outputDir) {
+    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
+    logActivity(currentTime, 3, "context saved", outputDir);
+    logActivity(currentTime, 1, "find vector 2 in memory position 0x0004", outputDir);
+    logActivity(currentTime, 1, "load address " + vectorTable[2] + " into the PC", outputDir);
+    logActivity(currentTime, 8, "FORK: copy parent PCB to child PCB", outputDir);
 
     PCB childProcess = pcbTable.back();
     childProcess.pid = ++currentPid;
@@ -176,36 +177,36 @@ void fork(int& currentTime) {
     pcbTable.push_back(childProcess);
     readyQueue.push_front(&pcbTable.back());
 
-    logActivity(currentTime, 2, "scheduler called");
-    logActivity(currentTime, 1, "IRET");
+    logActivity(currentTime, 2, "scheduler called", outputDir);
+    logActivity(currentTime, 1, "IRET", outputDir);
 }
 
-void exec(const std::string& fileName, int& currentTime) {
-    logActivity(currentTime, 1, "switch to kernel mode");
-    logActivity(currentTime, 3, "context saved");
-    logActivity(currentTime, 1, "find vector 3 in memory position 0x0006");
-    logActivity(currentTime, 1, "load address " + vectorTable[3] + " into the PC");
+void exec(const std::string& fileName, int& currentTime, const std::string& outputDir) {
+    logActivity(currentTime, 1, "switch to kernel mode", outputDir);
+    logActivity(currentTime, 3, "context saved", outputDir);
+    logActivity(currentTime, 1, "find vector 3 in memory position 0x0006", outputDir);
+    logActivity(currentTime, 1, "load address " + vectorTable[3] + " into the PC", outputDir);
 
     auto it = std::find_if(externalFiles.begin(), externalFiles.end(),
                            [&fileName](const ExternalFile& ef) { return ef.name == fileName; });
     if (it == externalFiles.end()) {
-        logActivity(currentTime, 1, "Exec failed: File not found");
+        logActivity(currentTime, 1, "Exec failed: File not found", outputDir);
         return;
     }
 
     int fileSize = it->size;
     int loadTime = (fileName == "program1") ? 30 : 5;
-    logActivity(currentTime, loadTime, "EXEC: load " + fileName + " of size " + std::to_string(fileSize) + "Mb");
+    logActivity(currentTime, loadTime, "EXEC: load " + fileName + " of size " + std::to_string(fileSize) + "Mb", outputDir);
 
     int partitionIndex = findBestFitPartition(fileSize);
     if (partitionIndex == -1) {
-        logActivity(currentTime, 1, "Exec failed: No suitable partition");
+        logActivity(currentTime, 1, "Exec failed: No suitable partition", outputDir);
         return;
     }
 
     logActivity(currentTime, 10, "found partition " + std::to_string(partitionIndex + 1) + 
-                " with " + std::to_string(memoryPartitions[partitionIndex].size) + "Mb of space");
-    logActivity(currentTime, 6, "partition " + std::to_string(partitionIndex + 1) + " marked as occupied");
+                " with " + std::to_string(memoryPartitions[partitionIndex].size) + "Mb of space", outputDir);
+    logActivity(currentTime, 6, "partition " + std::to_string(partitionIndex + 1) + " marked as occupied", outputDir);
 
     PCB& currentProcess = pcbTable.back();
     currentProcess.programName = fileName;
@@ -214,9 +215,9 @@ void exec(const std::string& fileName, int& currentTime) {
     memoryPartitions[partitionIndex].occupied = true;
     memoryPartitions[partitionIndex].processId = currentProcess.pid;
 
-    logActivity(currentTime, 2, "updating PCB with new information");
-    scheduler(currentTime);
-    logActivity(currentTime, 1, "IRET");
+    logActivity(currentTime, 2, "updating PCB with new information", outputDir);
+    scheduler(currentTime, outputDir);
+    logActivity(currentTime, 1, "IRET", outputDir);
 }
 
 bool fileExists(const std::string& filename) {
@@ -237,11 +238,22 @@ int main(int argc, char** argv) {
     std::string inputDir = argv[1];
 
 
+
+    // Create the "outputs" folder if it doesn't exist
+    std::string outputDir = inputDir + "/outputs";
+    if (mkdir(outputDir.c_str(), 0777) == -1) {
+        if (errno != EEXIST) {
+            std::cerr << "Error creating output directory: " << errno << std::endl;
+            return 1;
+        }
+    }
+
     // Clear existing output files
-    std::ofstream clear_exec("execution.txt", std::ios::trunc);
+    std::ofstream clear_exec(outputDir + "/execution.txt", std::ios::trunc);
     clear_exec.close();
-    std::ofstream clear_status("system_status.txt", std::ios::trunc);
+    std::ofstream clear_status(outputDir + "/system_status.txt", std::ios::trunc);
     clear_status.close();
+
 
     initializeSystem();
     loadVectorTable(inputDir);
@@ -250,27 +262,26 @@ int main(int argc, char** argv) {
     std::ifstream input_file(inputDir + "/trace.txt");
     std::string trace;
     int current_time = 0;
-
     while(std::getline(input_file, trace)) {
-        auto parts = split_delim(trace, ",");
-        auto activity = parts[0];
+            auto parts = split_delim(trace, ",");
+            auto activity = parts[0];
 
-        if (activity == "FORK") {
-            fork(current_time);
-            saveSystemStatus(current_time);
-        } else if (activity.substr(0, 4) == "EXEC") {
-            std::string programName = split_delim(activity, " ")[1];
-            exec(programName, current_time);
-            saveSystemStatus(current_time);
-            
-            // Execute program instructions
-            if (!pcbTable.empty()) {
-                PCB& currentProcess = pcbTable.back();
-                executeProcess(currentProcess, current_time, inputDir);
-                saveSystemStatus(current_time);
+            if (activity == "FORK") {
+                fork(current_time, outputDir);
+                saveSystemStatus(current_time, outputDir);
+            } else if (activity.substr(0, 4) == "EXEC") {
+                std::string programName = split_delim(activity, " ")[1];
+                exec(programName, current_time, outputDir);
+                saveSystemStatus(current_time, outputDir);
+                
+                // Execute program instructions
+                if (!pcbTable.empty()) {
+                    PCB& currentProcess = pcbTable.back();
+                    executeProcess(currentProcess, current_time, inputDir);
+                    saveSystemStatus(current_time, outputDir);
+                }
             }
         }
-    }
 
     return 0;
 }
