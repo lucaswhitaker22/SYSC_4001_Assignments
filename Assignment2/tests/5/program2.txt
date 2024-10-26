@@ -1,4 +1,0 @@
-FORK, 25
-EXEC program3, 75
-FORK, 30
-EXEC program4, 60
