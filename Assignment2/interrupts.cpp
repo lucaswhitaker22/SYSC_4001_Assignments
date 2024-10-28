@@ -1,43 +1,10 @@
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
-#include <sstream>
-#include <iomanip>
-#include <algorithm>
-#include <map>
-#include <cstring>
-#include <cerrno>
-#include <sys/stat.h>
 
-const int ADDR_BASE = 0x0000;
-const int VECTOR_SIZE = 2;
-
-struct MemoryPartition {
-    unsigned int number;
-    unsigned int size;
-    std::string status;
-};
-
-struct PCB {
-    unsigned int pid;
-    std::string name;
-    unsigned int partition;
-    unsigned int size;
-    unsigned int remaining_cpu_time;
-    std::string state;
-};
-
-struct ExternalFile {
-    std::string name;
-    unsigned int size;
-};
+#include "interrupts.hpp"
 
 std::vector<MemoryPartition> memory_partitions = {
     {1, 40, "free"}, {2, 25, "free"}, {3, 15, "free"},
     {4, 10, "free"}, {5, 8, "free"}, {6, 2, "occupied"}
 };
-
 std::vector<PCB> pcb_table;
 std::vector<ExternalFile> external_files;
 std::map<int, std::string> vector_table;
