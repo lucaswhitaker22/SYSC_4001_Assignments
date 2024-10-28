@@ -1,0 +1,3 @@
+FORK, 14
+EXEC program4, 32
+END_IO 9, 160
