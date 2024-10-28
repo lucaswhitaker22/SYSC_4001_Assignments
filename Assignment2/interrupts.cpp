@@ -1,23 +1,23 @@
-#include <sys/stat.h>
-#include <fstream>
 #include <iostream>
-#include <random>
+#include <fstream>
 #include <string>
 #include <vector>
+#include <random>
 #include <sstream>
-#include <map>
+#include <iomanip>
 #include <algorithm>
+#include <map>
 #include <cstring>
 #include <cerrno>
-#include <iomanip>
+#include <sys/stat.h>
 
 const int ADDR_BASE = 0x0000;
-const int VECTOR_SIZE = 4;
+const int VECTOR_SIZE = 2;
 
 struct MemoryPartition {
     unsigned int number;
     unsigned int size;
-    std::string code;
+    std::string status;
 };
 
 struct PCB {
@@ -36,7 +36,7 @@ struct ExternalFile {
 
 std::vector<MemoryPartition> memory_partitions = {
     {1, 40, "free"}, {2, 25, "free"}, {3, 15, "free"},
-    {4, 10, "free"}, {5, 8, "free"}, {6, 2, "init"}
+    {4, 10, "free"}, {5, 8, "free"}, {6, 2, "occupied"}
 };
 
 std::vector<PCB> pcb_table;
@@ -45,10 +45,6 @@ std::map<int, std::string> vector_table;
 
 unsigned int current_pid = 11;
 int current_time = 0;
-
-std::random_device rd;
-std::mt19937 rng(rd());
-std::uniform_int_distribution<> exec_time_distr(1, 10);
 
 std::string execution_log;
 
@@ -73,14 +69,8 @@ void load_external_files(const std::string& file_path) {
     std::string line;
     while (std::getline(file, line)) {
         auto parts = split_delim(line, ",");
-        if (parts.size() != 2) {
-            std::cerr << "Invalid line in external_files.txt: " << line << std::endl;
-            continue;
-        }
-        try {
+        if (parts.size() == 2) {
             external_files.push_back({parts[0], static_cast<unsigned int>(std::stoi(parts[1]))});
-        } catch (const std::exception& e) {
-            std::cerr << "Error parsing line in external_files.txt: " << line << " - " << e.what() << std::endl;
         }
     }
 }
@@ -94,17 +84,13 @@ void load_vector_table(const std::string& file_path) {
     std::string line;
     int vector_num = 0;
     while (std::getline(file, line)) {
-        try {
-            vector_table[vector_num] = line;
-            vector_num++;
-        } catch (const std::exception& e) {
-            std::cerr << "Error parsing line in vector_table.txt: " << line << " - " << e.what() << std::endl;
-        }
+        vector_table[vector_num] = line;
+        vector_num++;
     }
 }
 
 void init_pcb() {
-    pcb_table.push_back({current_pid++, "init", 6, 1, 0, "Ready"});
+    pcb_table.push_back({current_pid, "init", 6, 1, 0, "Ready"});
 }
 
 void log_step(const std::string& step, int duration) {
@@ -119,10 +105,6 @@ void simulate_syscall(int vector_num) {
     ss << "find vector " << vector_num << " in memory position 0x" 
        << std::setfill('0') << std::setw(4) << std::hex << (ADDR_BASE + (vector_num * VECTOR_SIZE));
     log_step(ss.str(), 1);
-    if (vector_table.find(vector_num) == vector_table.end()) {
-        std::cerr << "Error: Vector " << vector_num << " not found in vector table" << std::endl;
-        return;
-    }
     log_step("load address " + vector_table[vector_num] + " into the PC", 1);
 }
 
@@ -149,20 +131,15 @@ void save_system_status(const std::string& output_file_path) {
 
 void simulate_fork(const std::string& output_directory) {
     simulate_syscall(2);
-    int duration = exec_time_distr(rng);
-    log_step("FORK: copy parent PCB to child PCB", duration);
+    log_step("FORK: copy parent PCB to child PCB", 8);
     
-    if (pcb_table.empty()) {
-        std::cerr << "Error: PCB table is empty" << std::endl;
-        return;
-    }
     PCB parent = pcb_table.back();
     PCB child = parent;
-    child.pid = current_pid++;
+    child.pid = ++current_pid;
     child.state = "Ready";
     pcb_table.push_back(child);
 
-    log_step("scheduler called", exec_time_distr(rng));
+    log_step("scheduler called", 2);
     log_step("IRET", 1);
     
     save_system_status(output_directory + "/system_status.txt");
@@ -179,34 +156,30 @@ void simulate_exec(const std::string& program_name, const std::string& output_di
     }
 
     unsigned int program_size = it->size;
-    log_step("EXEC: load " + program_name + " of size " + std::to_string(program_size) + "Mb", exec_time_distr(rng));
+    log_step("EXEC: load " + program_name + " of size " + std::to_string(program_size) + "Mb", 30);
 
     auto partition_it = std::min_element(memory_partitions.begin(), memory_partitions.end(),
                                          [&](const MemoryPartition& a, const MemoryPartition& b) {
-                                             return (a.code == "free" && a.size >= program_size && a.size < b.size) ||
-                                                    (b.code != "free" || b.size < program_size);
+                                             return (a.status == "free" && a.size >= program_size && a.size < b.size) ||
+                                                    (b.status != "free" || b.size < program_size);
                                          });
-    if (partition_it == memory_partitions.end() || partition_it->code != "free" || partition_it->size < program_size) {
+    if (partition_it == memory_partitions.end() || partition_it->status != "free" || partition_it->size < program_size) {
         std::cerr << "No suitable partition found for " << program_name << std::endl;
         return;
     }
 
-    log_step("found partition " + std::to_string(partition_it->number) + " with " + std::to_string(partition_it->size) + "Mb of space", exec_time_distr(rng));
-    log_step("partition " + std::to_string(partition_it->number) + " marked as occupied", exec_time_distr(rng));
+    log_step("found partition " + std::to_string(partition_it->number) + " with " + std::to_string(partition_it->size) + "Mb of space", 10);
+    log_step("partition " + std::to_string(partition_it->number) + " marked as occupied", 6);
 
-    partition_it->code = program_name;
+    partition_it->status = "occupied";
     
-    if (pcb_table.empty()) {
-        std::cerr << "Error: PCB table is empty" << std::endl;
-        return;
-    }
     PCB& current_pcb = pcb_table.back();
     current_pcb.name = program_name;
     current_pcb.partition = partition_it->number;
     current_pcb.size = program_size;
 
-    log_step("updating PCB with new information", exec_time_distr(rng));
-    log_step("scheduler called", exec_time_distr(rng));
+    log_step("updating PCB with new information", 2);
+    log_step("scheduler called", 2);
     log_step("IRET", 1);
     
     save_system_status(output_directory + "/system_status.txt");
@@ -218,9 +191,9 @@ void simulate_cpu(int duration) {
 
 void simulate_syscall(int syscall_num, int duration) {
     simulate_syscall(syscall_num);
-    log_step(std::to_string(syscall_num) + " ISR execution", duration / 3);
+    log_step("SYSCALL: run the ISR", duration / 3);
     log_step("transfer data", (duration * 2) / 3);
-    log_step("check for errors", exec_time_distr(rng));
+    log_step("check for errors", 13);
     log_step("IRET", 1);
 }
 
@@ -233,42 +206,24 @@ void process_trace(const std::string& trace_file_path, const std::string& output
     std::string line;
     while (std::getline(trace_file, line)) {
         auto parts = split_delim(line, ",");
-        if (parts.empty()) {
-            std::cerr << "Invalid line in trace file: " << line << std::endl;
-            continue;
-        }
+        if (parts.empty()) continue;
+        
         if (parts[0] == "FORK") {
             simulate_fork(output_directory);
         } else if (parts[0].substr(0, 4) == "EXEC") {
             auto exec_parts = split_delim(parts[0], " ");
-            if (exec_parts.size() < 2) {
-                std::cerr << "Invalid EXEC command: " << parts[0] << std::endl;
-                continue;
+            if (exec_parts.size() >= 2) {
+                simulate_exec(exec_parts[1], output_directory);
             }
-            simulate_exec(exec_parts[1], output_directory);
         } else if (parts[0] == "CPU") {
-            if (parts.size() < 2) {
-                std::cerr << "Invalid CPU command: " << line << std::endl;
-                continue;
-            }
-            try {
+            if (parts.size() >= 2) {
                 simulate_cpu(std::stoi(parts[1]));
-            } catch (const std::exception& e) {
-                std::cerr << "Error parsing CPU duration: " << parts[1] << " - " << e.what() << std::endl;
             }
         } else if (parts[0].substr(0, 7) == "SYSCALL") {
             auto syscall_parts = split_delim(parts[0], " ");
-            if (syscall_parts.size() < 2 || parts.size() < 2) {
-                std::cerr << "Invalid SYSCALL command: " << line << std::endl;
-                continue;
-            }
-            try {
+            if (syscall_parts.size() >= 2 && parts.size() >= 2) {
                 simulate_syscall(std::stoi(syscall_parts[1]), std::stoi(parts[1]));
-            } catch (const std::exception& e) {
-                std::cerr << "Error parsing SYSCALL: " << line << " - " << e.what() << std::endl;
             }
-        } else {
-            std::cerr << "Unknown command in trace file: " << parts[0] << std::endl;
         }
     }
 }
@@ -281,22 +236,13 @@ int main(int argc, char** argv) {
 
     std::string input_directory(argv[1]);
     std::string output_directory = input_directory + "/outputs";
-    if (mkdir(output_directory.c_str(), 0777) == -1) {
-        if (errno != EEXIST) {
-            std::cerr << "Failed to create output directory: " << output_directory << " - " << strerror(errno) << std::endl;
-            return 1;
-        }
-    }
+    mkdir(output_directory.c_str(), 0777);
+
     // Delete existing output files if they exist
     std::string system_status_file = output_directory + "/system_status.txt";
     std::string execution_file = output_directory + "/execution.txt";
-    
-    if (std::remove(system_status_file.c_str()) == 0) {
-        std::cout << "Deleted existing system_status.txt" << std::endl;
-    }
-    if (std::remove(execution_file.c_str()) == 0) {
-        std::cout << "Deleted existing execution.txt" << std::endl;
-    }
+    std::remove(system_status_file.c_str());
+    std::remove(execution_file.c_str());
 
     load_external_files(input_directory + "/external_files.txt");
     load_vector_table(input_directory + "/vector_table.txt");
@@ -306,12 +252,12 @@ int main(int argc, char** argv) {
     process_trace(input_directory + "/trace.txt", output_directory);
 
     std::ofstream execution_output(execution_file);
-    if (!execution_output.is_open()) {
-        std::cerr << "Error opening file for writing: " << execution_file << " - " << strerror(errno) << std::endl;
-        return 1;
+    if (execution_output.is_open()) {
+        execution_output << execution_log;
+        execution_output.close();
+    } else {
+        std::cerr << "Error opening file for writing: " << execution_file << std::endl;
     }
-    execution_output << execution_log;
-    execution_output.close();
 
     std::cout << "Output generated in " << output_directory << std::endl;
     return 0;
