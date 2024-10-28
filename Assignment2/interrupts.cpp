@@ -2,7 +2,6 @@
 #include <fstream>
 #include <string>
 #include <vector>
-#include <random>
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
@@ -197,7 +196,41 @@ void simulate_syscall(int syscall_num, int duration) {
     log_step("IRET", 1);
 }
 
-void process_trace(const std::string& trace_file_path, const std::string& output_directory) {
+void execute_program(const std::string& program_name, const std::string& output_directory, const std::string& input_directory) {
+    std::string program_file = input_directory + "/" + program_name + ".txt";
+    std::ifstream program(program_file);
+    if (!program.is_open()) {
+        std::cerr << "Error opening program file: " << program_file << " - " << strerror(errno) << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(program, line)) {
+        auto parts = split_delim(line, ",");
+        if (parts.empty()) continue;
+
+        if (parts[0] == "FORK") {
+            simulate_fork(output_directory);
+        } else if (parts[0].substr(0, 4) == "EXEC") {
+            auto exec_parts = split_delim(parts[0], " ");
+            if (exec_parts.size() >= 2) {
+                simulate_exec(exec_parts[1], output_directory);
+                execute_program(exec_parts[1], output_directory, input_directory);
+            }
+        } else if (parts[0] == "CPU") {
+            if (parts.size() >= 2) {
+                simulate_cpu(std::stoi(parts[1]));
+            }
+        } else if (parts[0].substr(0, 7) == "SYSCALL") {
+            auto syscall_parts = split_delim(parts[0], " ");
+            if (syscall_parts.size() >= 2 && parts.size() >= 2) {
+                simulate_syscall(std::stoi(syscall_parts[1]), std::stoi(parts[1]));
+            }
+        }
+    }
+}
+
+void process_trace(const std::string& trace_file_path, const std::string& output_directory,  const std::string& input_directory) {
     std::ifstream trace_file(trace_file_path);
     if (!trace_file.is_open()) {
         std::cerr << "Error opening file: " << trace_file_path << " - " << strerror(errno) << std::endl;
@@ -214,6 +247,7 @@ void process_trace(const std::string& trace_file_path, const std::string& output
             auto exec_parts = split_delim(parts[0], " ");
             if (exec_parts.size() >= 2) {
                 simulate_exec(exec_parts[1], output_directory);
+                execute_program(exec_parts[1], output_directory, input_directory);
             }
         } else if (parts[0] == "CPU") {
             if (parts.size() >= 2) {
@@ -249,7 +283,7 @@ int main(int argc, char** argv) {
     init_pcb();
 
     save_system_status(system_status_file);
-    process_trace(input_directory + "/trace.txt", output_directory);
+    process_trace(input_directory + "/trace.txt", output_directory, input_directory);
 
     std::ofstream execution_output(execution_file);
     if (execution_output.is_open()) {
