@@ -1,6 +1,6 @@
-
 #include "interrupts.hpp"
 
+// Define memory partitions
 std::vector<MemoryPartition> memory_partitions = {
     {1, 40, "free"}, {2, 25, "free"}, {3, 15, "free"},
     {4, 10, "free"}, {5, 8, "free"}, {6, 2, "occupied"}
@@ -9,11 +9,12 @@ std::vector<PCB> pcb_table;
 std::vector<ExternalFile> external_files;
 std::map<int, std::string> vector_table;
 
-unsigned int current_pid = 11;
+unsigned int current_pid = 0;
 int current_time = 0;
 
 std::string execution_log;
 
+// Helper function to split a string by a delimiter
 std::vector<std::string> split_delim(const std::string& s, const std::string& delimiter) {
     std::vector<std::string> tokens;
     size_t last = 0;
@@ -26,6 +27,7 @@ std::vector<std::string> split_delim(const std::string& s, const std::string& de
     return tokens;
 }
 
+// Load external files from a given file path
 void load_external_files(const std::string& file_path) {
     std::ifstream file(file_path);
     if (!file.is_open()) {
@@ -41,6 +43,7 @@ void load_external_files(const std::string& file_path) {
     }
 }
 
+// Load vector table from a given file path
 void load_vector_table(const std::string& file_path) {
     std::ifstream file(file_path);
     if (!file.is_open()) {
@@ -55,15 +58,18 @@ void load_vector_table(const std::string& file_path) {
     }
 }
 
+// Initialize the Process Control Block (PCB)
 void init_pcb() {
     pcb_table.push_back({current_pid, "init", 6, 1, 0, "Ready"});
 }
 
+// Log a step in the execution process
 void log_step(const std::string& step, int duration) {
     execution_log += std::to_string(current_time) + ", " + std::to_string(duration) + ", " + step + "\n";
     current_time += duration;
 }
 
+// Simulate a system call
 void simulate_syscall(int vector_num) {
     log_step("switch to kernel mode", 1);
     log_step("context saved", 3);
@@ -74,6 +80,7 @@ void simulate_syscall(int vector_num) {
     log_step("load address " + vector_table[vector_num] + " into the PC", 1);
 }
 
+// Save the current system status to a file
 void save_system_status(const std::string& output_file_path) {
     std::ofstream output_file(output_file_path, std::ios::app);
     if (!output_file.is_open()) {
@@ -95,6 +102,7 @@ void save_system_status(const std::string& output_file_path) {
     output_file << "!-----------------------------------------------------------!\n\n";
 }
 
+// Simulate the fork system call
 void simulate_fork(const std::string& output_directory) {
     simulate_syscall(2);
     log_step("FORK: copy parent PCB to child PCB", 8);
@@ -111,6 +119,7 @@ void simulate_fork(const std::string& output_directory) {
     save_system_status(output_directory + "/system_status.txt");
 }
 
+// Simulate the exec system call
 void simulate_exec(const std::string& program_name, const std::string& output_directory) {
     simulate_syscall(3);
     
@@ -124,6 +133,7 @@ void simulate_exec(const std::string& program_name, const std::string& output_di
     unsigned int program_size = it->size;
     log_step("EXEC: load " + program_name + " of size " + std::to_string(program_size) + "Mb", 30);
 
+    // Find a suitable memory partition
     auto partition_it = std::min_element(memory_partitions.begin(), memory_partitions.end(),
                                          [&](const MemoryPartition& a, const MemoryPartition& b) {
                                              return (a.status == "free" && a.size >= program_size && a.size < b.size) ||
@@ -151,10 +161,12 @@ void simulate_exec(const std::string& program_name, const std::string& output_di
     save_system_status(output_directory + "/system_status.txt");
 }
 
+// Simulate CPU execution
 void simulate_cpu(int duration) {
     log_step("CPU", duration);
 }
 
+// Simulate a general system call
 void simulate_syscall(int syscall_num, int duration) {
     simulate_syscall(syscall_num);
     log_step("SYSCALL: run the ISR", duration / 3);
@@ -163,6 +175,7 @@ void simulate_syscall(int syscall_num, int duration) {
     log_step("IRET", 1);
 }
 
+// Execute a program
 void execute_program(const std::string& program_name, const std::string& output_directory, const std::string& input_directory) {
     std::string program_file = input_directory + "/" + program_name + ".txt";
     std::ifstream program(program_file);
@@ -197,6 +210,7 @@ void execute_program(const std::string& program_name, const std::string& output_
     }
 }
 
+// Process the trace file
 void process_trace(const std::string& trace_file_path, const std::string& output_directory,  const std::string& input_directory) {
     std::ifstream trace_file(trace_file_path);
     if (!trace_file.is_open()) {
@@ -245,13 +259,18 @@ int main(int argc, char** argv) {
     std::remove(system_status_file.c_str());
     std::remove(execution_file.c_str());
 
+    // Load necessary data
     load_external_files(input_directory + "/external_files.txt");
     load_vector_table(input_directory + "/vector_table.txt");
     init_pcb();
 
+    // Save initial system status
     save_system_status(system_status_file);
+
+    // Process the trace file
     process_trace(input_directory + "/trace.txt", output_directory, input_directory);
 
+    // Write execution log to file
     std::ofstream execution_output(execution_file);
     if (execution_output.is_open()) {
         execution_output << execution_log;
