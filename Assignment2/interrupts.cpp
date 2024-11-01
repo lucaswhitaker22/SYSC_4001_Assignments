@@ -30,10 +30,6 @@ std::vector<std::string> split_delim(const std::string& s, const std::string& de
 // Load external files from a given file path
 void load_external_files(const std::string& file_path) {
     std::ifstream file(file_path);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file: " << file_path << " - " << strerror(errno) << std::endl;
-        return;
-    }
     std::string line;
     while (std::getline(file, line)) {
         auto parts = split_delim(line, ",");
@@ -46,10 +42,6 @@ void load_external_files(const std::string& file_path) {
 // Load vector table from a given file path
 void load_vector_table(const std::string& file_path) {
     std::ifstream file(file_path);
-    if (!file.is_open()) {
-        std::cerr << "Error opening file: " << file_path << " - " << strerror(errno) << std::endl;
-        return;
-    }
     std::string line;
     int vector_num = 0;
     while (std::getline(file, line)) {
@@ -83,12 +75,7 @@ void simulate_syscall(int vector_num) {
 // Save the current system status to a file
 void save_system_status(const std::string& output_file_path) {
     std::ofstream output_file(output_file_path, std::ios::app);
-    if (!output_file.is_open()) {
-        std::cerr << "Error opening file for writing: " << output_file_path << " - " << strerror(errno) << std::endl;
-        return;
-    }
-    output_file << "!-----------------------------------------------------------!\n";
-    output_file << "Save Time: " << current_time << " ms\n";
+    output_file << "\nSave Time: " << current_time << " ms\n";
     output_file << "+--------------------------------------------+\n";
     output_file << "| PID |Program Name |Partition Number | size |\n";
     output_file << "+--------------------------------------------+\n";
@@ -99,7 +86,6 @@ void save_system_status(const std::string& output_file_path) {
                     << std::setw(4) << std::left << pcb.size << " |\n";
     }
     output_file << "+--------------------------------------------+\n";
-    output_file << "!-----------------------------------------------------------!\n\n";
 }
 
 // Simulate the fork system call
@@ -125,10 +111,6 @@ void simulate_exec(const std::string& program_name, const std::string& output_di
     
     auto it = std::find_if(external_files.begin(), external_files.end(),
                            [&](const ExternalFile& ef) { return ef.name == program_name; });
-    if (it == external_files.end()) {
-        std::cerr << "Program not found: " << program_name << std::endl;
-        return;
-    }
 
     unsigned int program_size = it->size;
     log_step("EXEC: load " + program_name + " of size " + std::to_string(program_size) + "Mb", 30);
@@ -139,10 +121,6 @@ void simulate_exec(const std::string& program_name, const std::string& output_di
                                              return (a.status == "free" && a.size >= program_size && a.size < b.size) ||
                                                     (b.status != "free" || b.size < program_size);
                                          });
-    if (partition_it == memory_partitions.end() || partition_it->status != "free" || partition_it->size < program_size) {
-        std::cerr << "No suitable partition found for " << program_name << std::endl;
-        return;
-    }
 
     log_step("found partition " + std::to_string(partition_it->number) + " with " + std::to_string(partition_it->size) + "Mb of space", 10);
     log_step("partition " + std::to_string(partition_it->number) + " marked as occupied", 6);
@@ -179,10 +157,6 @@ void simulate_syscall(int syscall_num, int duration) {
 void execute_program(const std::string& program_name, const std::string& output_directory, const std::string& input_directory) {
     std::string program_file = input_directory + "/" + program_name + ".txt";
     std::ifstream program(program_file);
-    if (!program.is_open()) {
-        std::cerr << "Error opening program file: " << program_file << " - " << strerror(errno) << std::endl;
-        return;
-    }
 
     std::string line;
     while (std::getline(program, line)) {
@@ -213,10 +187,6 @@ void execute_program(const std::string& program_name, const std::string& output_
 // Process the trace file
 void process_trace(const std::string& trace_file_path, const std::string& output_directory,  const std::string& input_directory) {
     std::ifstream trace_file(trace_file_path);
-    if (!trace_file.is_open()) {
-        std::cerr << "Error opening file: " << trace_file_path << " - " << strerror(errno) << std::endl;
-        return;
-    }
     std::string line;
     while (std::getline(trace_file, line)) {
         auto parts = split_delim(line, ",");
