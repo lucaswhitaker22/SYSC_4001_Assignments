@@ -31,6 +31,9 @@ std::vector<std::string> split_delim(const std::string& s, const std::string& de
 void load_external_files(const std::string& file_path) {
     std::ifstream file(file_path);
     std::string line;
+        if (!file.is_open()) {
+        throw std::runtime_error("Failed to open file: " + file_path);
+    }
     while (std::getline(file, line)) {
         auto parts = split_delim(line, ",");
         if (parts.size() == 2) {
