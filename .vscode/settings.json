@@ -109,6 +109,7 @@
     "filesystem": "cpp",
     "codecvt": "cpp",
     "cstring": "cpp",
-    "cinttypes": "cpp"
+    "cinttypes": "cpp",
+    "wait.h": "c"
   }
 }
