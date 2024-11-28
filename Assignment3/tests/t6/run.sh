@@ -1,10 +1,13 @@
 #!/bin/bash
 cd ./Assignment3/tests/t6
-# test_scenario6.sh - High memory requirement processes
+# test_scenario6.sh -  memory constraints
 cat > input_data.txt << EOF
-1,10,0,50,15,2
-2,15,1,40,20,1
-3,8,2,60,25,2
+0,40,0,100,20,5
+1,25,5,80,0,0
+2,15,10,60,30,10
+3,10,15,40,10,2
+4,8,20,30,0,0
+5,2,25,20,5,1
 EOF
 
 ./../../output/interrupts input_data.txt

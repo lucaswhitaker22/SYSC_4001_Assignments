@@ -161,12 +161,27 @@ void handle_process_completion(struct PCB* process) {
     log_memory_status();
     process->completion_time = current_time + 1; 
 }
+
+void enqueue_process_priority(struct PCB* process) {
+    int i;
+    for (i = ready_queue_size - 1; i >= 0; i--) {
+        if (ready_queue[i]->priority <= process->priority) {
+            break;
+        }
+        ready_queue[i + 1] = ready_queue[i];
+    }
+    ready_queue[i + 1] = process;
+    ready_queue_size++;
+}
+
 void run_fcfs(void) {
     int all_processes_done = 0;
+    
     while (!all_processes_done) {
         // Check for new arrivals
         for (int i = 0; i < num_processes; i++) {
-            if (pcb_table[i].arrival_time == current_time && strcmp(pcb_table[i].state, STATE_NEW) == 0) {
+            if (pcb_table[i].arrival_time == current_time && 
+                strcmp(pcb_table[i].state, STATE_NEW) == 0) {
                 int partition = find_memory_partition(pcb_table[i].memory_size);
                 if (partition != -1) {
                     memory_partitions[partition].occupied_by = pcb_table[i].pid;
@@ -181,6 +196,7 @@ void run_fcfs(void) {
 
         handle_io_completion();
 
+        // Select new process if needed
         if (running_process == NULL && ready_queue_size > 0) {
             running_process = dequeue_process();
             strcpy(running_process->state, STATE_RUNNING);
@@ -190,18 +206,21 @@ void run_fcfs(void) {
             }
         }
 
+        // Execute current process
         if (running_process != NULL) {
             running_process->remaining_cpu_time--;
 
-            // Check for I/O
-            if ((running_process->total_cpu_time - running_process->remaining_cpu_time) % running_process->io_frequency == 0 && running_process->remaining_cpu_time > 0) {
+            // Handle I/O
+            if (running_process->io_frequency > 0 && 
+                (running_process->total_cpu_time - running_process->remaining_cpu_time) % running_process->io_frequency == 0 && 
+                running_process->remaining_cpu_time > 0) {
                 running_process->last_io_time = current_time;
                 blocked_queue[blocked_queue_size++] = running_process;
                 strcpy(running_process->state, STATE_WAITING);
                 log_transition(running_process, STATE_RUNNING, STATE_WAITING);
                 running_process = NULL;
             }
-            // Check for process completion
+            // Handle completion
             else if (running_process->remaining_cpu_time == 0) {
                 handle_process_completion(running_process);
                 running_process = NULL;
@@ -211,18 +230,6 @@ void run_fcfs(void) {
         current_time++;
         all_processes_done = check_all_processes_done();
     }
-}
-
-void enqueue_process_priority(struct PCB* process) {
-    int i;
-    for (i = ready_queue_size - 1; i >= 0; i--) {
-        if (ready_queue[i]->priority <= process->priority) {
-            break;
-        }
-        ready_queue[i + 1] = ready_queue[i];
-    }
-    ready_queue[i + 1] = process;
-    ready_queue_size++;
 }
 
 void run_priority(void) {
@@ -283,14 +290,16 @@ void run_priority(void) {
         all_processes_done = check_all_processes_done();
     }
 }
+
 void run_round_robin(void) {
     int all_processes_done = 0;
-    int time_since_last_switch = 0;
-
+    int time_in_quantum = 0;
+    
     while (!all_processes_done) {
         // Check for new arrivals
         for (int i = 0; i < num_processes; i++) {
-            if (pcb_table[i].arrival_time == current_time && strcmp(pcb_table[i].state, STATE_NEW) == 0) {
+            if (pcb_table[i].arrival_time == current_time && 
+                strcmp(pcb_table[i].state, STATE_NEW) == 0) {
                 int partition = find_memory_partition(pcb_table[i].memory_size);
                 if (partition != -1) {
                     memory_partitions[partition].occupied_by = pcb_table[i].pid;
@@ -305,33 +314,12 @@ void run_round_robin(void) {
 
         handle_io_completion();
 
-        // Check if current process needs to be preempted
-        if (running_process != NULL) {
-            time_since_last_switch++;
-            if (time_since_last_switch >= RR_QUANTUM && running_process->remaining_cpu_time > 0) {
-                enqueue_process(running_process);
-                strcpy(running_process->state, STATE_READY);
-                log_transition(running_process, STATE_RUNNING, STATE_READY);
-                running_process = NULL;
-                time_since_last_switch = 0;
-            }
-        }
-
-        // Select new process if none running
-        if (running_process == NULL && ready_queue_size > 0) {
-            running_process = dequeue_process();
-            strcpy(running_process->state, STATE_RUNNING);
-            log_transition(running_process, STATE_READY, STATE_RUNNING);
-            if (running_process->first_run_time == 0) {
-                running_process->first_run_time = current_time;
-            }
-            time_since_last_switch = 0;
-        }
-
+        // Execute current process
         if (running_process != NULL) {
             running_process->remaining_cpu_time--;
+            time_in_quantum++;
 
-            // Check for I/O
+            // Handle I/O
             if (running_process->io_frequency > 0 && 
                 (running_process->total_cpu_time - running_process->remaining_cpu_time) % running_process->io_frequency == 0 && 
                 running_process->remaining_cpu_time > 0) {
@@ -340,14 +328,33 @@ void run_round_robin(void) {
                 strcpy(running_process->state, STATE_WAITING);
                 log_transition(running_process, STATE_RUNNING, STATE_WAITING);
                 running_process = NULL;
-                time_since_last_switch = 0;
+                time_in_quantum = 0;
             }
-            // Check for process completion
+            // Handle completion
             else if (running_process->remaining_cpu_time == 0) {
                 handle_process_completion(running_process);
                 running_process = NULL;
-                time_since_last_switch = 0;
+                time_in_quantum = 0;
             }
+            // Check quantum expiration
+            else if (time_in_quantum >= RR_QUANTUM) {
+                enqueue_process(running_process);
+                strcpy(running_process->state, STATE_READY);
+                log_transition(running_process, STATE_RUNNING, STATE_READY);
+                running_process = NULL;
+                time_in_quantum = 0;
+            }
+        }
+
+        // Select new process if needed
+        if (running_process == NULL && ready_queue_size > 0) {
+            running_process = dequeue_process();
+            strcpy(running_process->state, STATE_RUNNING);
+            log_transition(running_process, STATE_READY, STATE_RUNNING);
+            if (running_process->first_run_time == 0) {
+                running_process->first_run_time = current_time;
+            }
+            time_in_quantum = 0;
         }
 
         current_time++;
@@ -405,14 +412,14 @@ int main(int argc, char* argv[]) {
 
     load_processes(argv[1]);
 
-  // printf("\nRunning FCFS Scheduler\n");
-   //run_fcfs();
+   printf("\nRunning FCFS Scheduler\n");
+//run_fcfs();
 
-printf("\nRunning Priority Scheduler\n");
-run_priority();
-    
+//printf("\nRunning Priority Scheduler\n");
+//run_priority();
+
 //printf("\nRunning Round Robin Scheduler\n");
-   // run_round_robin();
+run_round_robin();
 
 
     calculate_metrics();

@@ -2,8 +2,8 @@
 cd ./Assignment3/tests/t2
 # test_scenario2.sh - CPU-bound processes
 cat > input_data.txt << EOF
-1,10,0,50,15,2
-2,15,1,40,20,1
-3,8,2,60,25,2
+0,8,0,100,20,5
+1,12,10,80,40,10
+2,6,20,60,30,5
 EOF
 ./../../output/interrupts input_data.txt

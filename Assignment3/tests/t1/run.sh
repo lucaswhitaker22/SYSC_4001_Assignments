@@ -2,8 +2,9 @@
 cd ./Assignment3/tests/t1
 # test_scenario1.sh - IO-bound processes
 cat > input_data.txt << EOF
-1,5,0,20,5,3
-2,8,0,15,3,4
+0,10,0,50,0,0
+1,15,0,30,0,0
+2,5,0,20,0,0
 EOF
 
 ls
