@@ -408,11 +408,11 @@ int main(int argc, char* argv[]) {
   // printf("\nRunning FCFS Scheduler\n");
    //run_fcfs();
 
-//printf("\nRunning Priority Scheduler\n");
-  // run_priority();
+printf("\nRunning Priority Scheduler\n");
+run_priority();
     
-printf("\nRunning Round Robin Scheduler\n");
-    run_round_robin();
+//printf("\nRunning Round Robin Scheduler\n");
+   // run_round_robin();
 
 
     calculate_metrics();
