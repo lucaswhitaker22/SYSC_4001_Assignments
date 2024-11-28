@@ -1,12 +1,10 @@
 #!/bin/bash
 cd ./Assignment3/tests/t10
-# test_scenario1.sh - short running processes
+# test_scenario10.sh - Processes with low I/O frequency
 cat > input_data.txt << EOF
-1,10,0,100,20,3
-2,15,20,80,16,4
-3,12,40,120,24,3
-4,8,60,90,18,4
-5,18,80,110,22,3
+1,10,0,40,15,3
+2,12,1,35,18,4
+3,8,2,45,20,5
 EOF
-ls
+
 ./../../output/interrupts input_data.txt
