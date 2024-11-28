@@ -10,18 +10,45 @@
 #include <string.h>
 #include <errno.h>
 
+
+#define MAX_RETRIES 3
+#define MIN_BACKOFF_TIME 100000  // 100ms in microseconds
+#define MAX_BACKOFF_TIME 1000000 
 #define NUM_TAS 5
-#define NUM_STUDENTS 20
+#define NUM_LINES 20
+#define STUDENTS_PER_LINE 4
 #define NUM_ROUNDS 3
-#define SHM_NAME "/student_list"
+#define SHM_NAME "/student_list.txt"
+
+// Add this structure to track semaphore states
+typedef struct {
+    sem_t *mutex;
+    int owner;
+    int locked;
+} ResourceSemaphore;
+
+ResourceSemaphore *resource_semaphores[NUM_TAS];
 
 typedef struct {
-    int student_list[NUM_STUDENTS];
-    int current_index;
+    int student_list[NUM_LINES][STUDENTS_PER_LINE];
+    int current_line;
+    int current_pos;
+    int ta_progress[NUM_TAS];  // Track each TA's progress
 } SharedData;
 
 sem_t *semaphores[NUM_TAS];
 const char *SEM_NAMES[] = {"/sem1", "/sem2", "/sem3", "/sem4", "/sem5"};
+
+// Function to write marks to individual TA files
+void write_mark_to_file(int ta_id, int student_num, int mark) {
+    char filename[20];
+    snprintf(filename, sizeof(filename), "TA%d.txt", ta_id + 1);
+    FILE *fp = fopen(filename, "a");
+    if (fp) {
+        fprintf(fp, "Student: %04d, Mark: %d\n", student_num, mark);
+        fclose(fp);
+    }
+}
 
 int try_acquire_semaphores(int ta_id) {
     int next_sem = (ta_id + 1) % NUM_TAS;
@@ -31,69 +58,97 @@ int try_acquire_semaphores(int ta_id) {
             return 1;
         }
         sem_post(semaphores[ta_id]);
-        return 0;
     }
     return 0;
 }
 
+int acquire_semaphores_safely(int ta_id) {
+    int first_sem = ta_id;
+    int second_sem = (ta_id + 1) % NUM_TAS;
+    
+    // Always acquire lower numbered semaphore first
+    if (first_sem > second_sem) {
+        int temp = first_sem;
+        first_sem = second_sem;
+        second_sem = temp;
+    }
+    
+    int retries = 0;
+    while (retries < MAX_RETRIES) {
+        if (sem_trywait(semaphores[first_sem]) == 0) {
+            if (sem_trywait(semaphores[second_sem]) == 0) {
+                return 1;
+            }
+            sem_post(semaphores[first_sem]);
+            
+            // Exponential backoff
+            unsigned int backoff_time = MIN_BACKOFF_TIME * (1 << retries);
+            if (backoff_time > MAX_BACKOFF_TIME) backoff_time = MAX_BACKOFF_TIME;
+            usleep(rand() % backoff_time);
+        }
+        retries++;
+    }
+    return 0;
+}
+
+// Modified TA process function
 void ta_process(int ta_id, SharedData *shared_data) {
+    char filename[20];
+    snprintf(filename, sizeof(filename), "TA%d.txt", ta_id + 1);
+    FILE *fp = fopen(filename, "w");
+    if (fp) fclose(fp);
+    
     int rounds = 0;
     
     while (rounds < NUM_ROUNDS) {
-        int next_sem = (ta_id + 1) % NUM_TAS;
-        
-        // Try to acquire both semaphores
-        while (!try_acquire_semaphores(ta_id)) {
-            printf("TA %d failed to acquire semaphores %d and %d, retrying...\n", 
-                   ta_id + 1, ta_id + 1, next_sem + 1);
-            usleep(100000); // Sleep for 100ms before retrying
+        // Try to acquire resources with exponential backoff
+        while (!acquire_semaphores_safely(ta_id)) {
+            printf("TA %d backing off and retrying\n", ta_id + 1);
+            usleep(rand() % MAX_BACKOFF_TIME);
         }
         
-        printf("TA %d acquired semaphores %d and %d\n", 
-               ta_id + 1, ta_id + 1, next_sem + 1);
-        
-        // Critical section - access shared memory
-        int student_num = shared_data->student_list[shared_data->current_index];
-        printf("TA %d reading student %d at index %d\n", 
-               ta_id + 1, student_num, shared_data->current_index);
-        shared_data->current_index = (shared_data->current_index + 1) % NUM_STUDENTS;
-        
-        // Random delay for database access (1-4 seconds)
-        sleep(rand() % 4 + 1);
-        
-        // Release semaphores
-        sem_post(semaphores[ta_id]);
-        sem_post(semaphores[next_sem]);
-        printf("TA %d released semaphores\n", ta_id + 1);
-        
-        // Check if end of list
-        if (student_num == 9999) {
-            printf("TA %d reached end of list, starting new round\n", ta_id + 1);
-            shared_data->current_index = 0;
-            rounds++;
-            if (rounds >= NUM_ROUNDS) {
-                printf("TA %d completed all rounds\n", ta_id + 1);
-                break;
+        // Critical section
+        int student_num;
+        {
+            student_num = shared_data->student_list[shared_data->current_line][shared_data->current_pos];
+            printf("TA %d reading student %04d\n", ta_id + 1, student_num);
+            
+            shared_data->current_pos++;
+            if (shared_data->current_pos >= STUDENTS_PER_LINE) {
+                shared_data->current_pos = 0;
+                shared_data->current_line = (shared_data->current_line + 1) % NUM_LINES;
             }
+        }
+        
+        // Release resources immediately after critical section
+        int first_sem = ta_id;
+        int second_sem = (ta_id + 1) % NUM_TAS;
+        if (first_sem > second_sem) {
+            int temp = first_sem;
+            first_sem = second_sem;
+            second_sem = temp;
+        }
+        sem_post(semaphores[second_sem]);
+        sem_post(semaphores[first_sem]);
+        
+        // Rest of the process remains the same
+        if (student_num == 9999) {
+            printf("TA %d completed round %d\n", ta_id + 1, rounds + 1);
+            rounds++;
+            if (rounds >= NUM_ROUNDS) break;
             continue;
         }
         
-        // Marking process
-        printf("TA %d marking student %d\n", ta_id + 1, student_num);
         int mark = rand() % 11;
-        printf("TA %d gave student %d mark: %d\n", ta_id + 1, student_num, mark);
-        
-        // Simulate marking time (1-10 seconds)
+        write_mark_to_file(ta_id, student_num, mark);
         sleep(rand() % 10 + 1);
     }
-    
     exit(0);
 }
-
 int main() {
     srand(time(NULL));
     
-    // Create shared memory
+    // Create and initialize shared memory
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
         perror("shm_open failed");
@@ -112,12 +167,26 @@ int main() {
         exit(1);
     }
     
-    // Initialize shared data
-    shared_data->current_index = 0;
-    for (int i = 0; i < NUM_STUDENTS - 1; i++) {
-        shared_data->student_list[i] = i + 1;
+    // Initialize shared data from file
+    FILE *student_list = fopen("student_list.txt", "r");
+    if (!student_list) {
+        perror("Failed to open student list");
+        exit(1);
     }
-    shared_data->student_list[NUM_STUDENTS - 1] = 9999;
+    
+    shared_data->current_line = 0;
+    shared_data->current_pos = 0;
+    memset(shared_data->ta_progress, 0, sizeof(shared_data->ta_progress));
+    
+    for (int i = 0; i < NUM_LINES; i++) {
+        for (int j = 0; j < STUDENTS_PER_LINE; j++) {
+            if (fscanf(student_list, "%d", &shared_data->student_list[i][j]) != 1) {
+                fprintf(stderr, "Error reading student list\n");
+                exit(1);
+            }
+        }
+    }
+    fclose(student_list);
     
     // Initialize semaphores
     for (int i = 0; i < NUM_TAS; i++) {
