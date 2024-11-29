@@ -1,9 +1,0 @@
-0	0	NEW	READY
-0	0	READY	RUNNING
-99	0	RUNNING	TERMINATED
-
-Metrics:
-Average Turnaround Time: 100.00
-Average Wait Time: 0.00
-Average Response Time: 0.00
-Throughput: 0.01 processes/ms
