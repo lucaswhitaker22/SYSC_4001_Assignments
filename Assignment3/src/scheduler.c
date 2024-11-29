@@ -49,20 +49,23 @@ void log_memory_status(void) {
 }
 
 int find_memory_partition(unsigned int size) {
+    // Use best-fit algorithm
     int best_fit = -1;
     unsigned int smallest_suitable = UINT_MAX;
     
+    // Check if any partitions are freed up
     for (int i = 0; i < NUM_PARTITIONS; i++) {
         if (memory_partitions[i].occupied_by == -1 && 
-            memory_partitions[i].size >= size &&
-            memory_partitions[i].size < smallest_suitable) {
-            best_fit = i;
-            smallest_suitable = memory_partitions[i].size;
+            memory_partitions[i].size >= size) {
+            // Found a partition that fits
+            if (memory_partitions[i].size < smallest_suitable) {
+                best_fit = i;
+                smallest_suitable = memory_partitions[i].size;
+            }
         }
     }
     return best_fit;
 }
-
 
 void load_processes(const char* filename) {
     FILE* file = fopen(filename, "r");

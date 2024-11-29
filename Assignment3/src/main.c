@@ -6,7 +6,7 @@
 #define MAX_FILENAME 100
 
 int main(int argc, char* argv[]) {
-    const char* TYPE = "priority";  // Change this to switch schedulers
+    const char* TYPE = "fcfs";  // Change this to switch schedulers
     char execution_filename[MAX_FILENAME];
     char memory_filename[MAX_FILENAME];
     

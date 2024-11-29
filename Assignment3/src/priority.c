@@ -11,15 +11,14 @@ extern struct MemoryPartition memory_partitions[NUM_PARTITIONS];
 extern struct PCB pcb_table[MAX_PROCESSES];
 
 void enqueue_process_priority(struct PCB* process) {
-    int i;
-    // Find position to insert based on priority
-    for (i = ready_queue_size - 1; i >= 0; i--) {
-        if (ready_queue[i]->priority <= process->priority) {
-            break;
-        }
-        ready_queue[i + 1] = ready_queue[i];
+    int i = 0;
+    while (i < ready_queue_size && ready_queue[i]->pid < process->pid) {
+        i++;
     }
-    ready_queue[i + 1] = process;
+    for (int j = ready_queue_size; j > i; j--) {
+        ready_queue[j] = ready_queue[j-1];
+    }
+    ready_queue[i] = process;
     ready_queue_size++;
 }
 
