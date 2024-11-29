@@ -10,8 +10,8 @@
 #include <string.h>
 #include <errno.h>
 
-#define MAX_RETRIES 3
-#define MIN_BACKOFF_TIME 100000  // 100ms in microseconds
+#define MAX_RETRIES 1
+#define MIN_BACKOFF_TIME 100000
 #define MAX_BACKOFF_TIME 1000000 
 #define NUM_TAS 5
 #define NUM_LINES 20
@@ -23,7 +23,8 @@ typedef struct {
     int student_list[NUM_LINES][STUDENTS_PER_LINE];
     int current_line;
     int current_pos;
-    int ta_progress[NUM_TAS];  // Track each TA's progress
+    int students_marked[NUM_TAS];
+    int total_students;
 } SharedData;
 
 sem_t *semaphores[NUM_TAS];
@@ -71,9 +72,9 @@ void ta_process(int ta_id, SharedData *shared_data) {
     FILE *fp = fopen(filename, "w");
     if (fp) fclose(fp);
     
-    int rounds = 0;
+    int target_students = (shared_data->total_students / NUM_TAS) * NUM_ROUNDS;
     
-    while (rounds < NUM_ROUNDS) {
+    while (shared_data->students_marked[ta_id] < target_students) {
         while (!acquire_semaphores_safely(ta_id)) {
             printf("TA %d: Backing off and retrying\n", ta_id + 1);
             usleep(rand() % MAX_BACKOFF_TIME);
@@ -99,18 +100,15 @@ void ta_process(int ta_id, SharedData *shared_data) {
         sem_post(semaphores[second_sem]);
         sem_post(semaphores[first_sem]);
         
-        if (student_num == 9999) {
-            printf("TA %d: Completed round %d\n", ta_id + 1, rounds + 1);
-            rounds++;
-            if (rounds >= NUM_ROUNDS) break;
-            continue;
-        }
-        
         int mark = rand() % 11;
         write_mark_to_file(ta_id, student_num, mark);
         printf("TA %d: Marking student %04d with grade %d\n", ta_id + 1, student_num, mark);
-        sleep(rand() % 4 + 1);  // Marking delay between 1-4 seconds
+        
+        shared_data->students_marked[ta_id]++;
+        sleep(rand() % 4 + 1);
     }
+    
+    printf("TA %d: Completed all rounds\n", ta_id + 1);
     exit(0);
 }
 
@@ -129,21 +127,22 @@ int main() {
     }
     
     SharedData *shared_data = mmap(NULL, sizeof(SharedData), 
-                                   PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+                                 PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shared_data == MAP_FAILED) {
         perror("mmap failed");
         exit(1);
     }
+    
+    shared_data->current_line = 0;
+    shared_data->current_pos = 0;
+    shared_data->total_students = NUM_LINES * STUDENTS_PER_LINE;
+    memset(shared_data->students_marked, 0, sizeof(int) * NUM_TAS);
     
     FILE *student_list = fopen("student_list.txt", "r");
     if (!student_list) {
         perror("Failed to open student list");
         exit(1);
     }
-    
-    shared_data->current_line = 0;
-    shared_data->current_pos = 0;
-    memset(shared_data->ta_progress, 0, sizeof(shared_data->ta_progress));
     
     for (int i = 0; i < NUM_LINES; i++) {
         for (int j = 0; j < STUDENTS_PER_LINE; j++) {
