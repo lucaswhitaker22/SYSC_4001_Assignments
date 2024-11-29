@@ -10,7 +10,6 @@
 #include <string.h>
 #include <errno.h>
 
-
 #define MAX_RETRIES 3
 #define MIN_BACKOFF_TIME 100000  // 100ms in microseconds
 #define MAX_BACKOFF_TIME 1000000 
@@ -18,16 +17,7 @@
 #define NUM_LINES 20
 #define STUDENTS_PER_LINE 4
 #define NUM_ROUNDS 3
-#define SHM_NAME "/student_list.txt"
-
-// Add this structure to track semaphore states
-typedef struct {
-    sem_t *mutex;
-    int owner;
-    int locked;
-} ResourceSemaphore;
-
-ResourceSemaphore *resource_semaphores[NUM_TAS];
+#define SHM_NAME "/student_list_shm"
 
 typedef struct {
     int student_list[NUM_LINES][STUDENTS_PER_LINE];
@@ -39,7 +29,6 @@ typedef struct {
 sem_t *semaphores[NUM_TAS];
 const char *SEM_NAMES[] = {"/sem1", "/sem2", "/sem3", "/sem4", "/sem5"};
 
-// Function to write marks to individual TA files
 void write_mark_to_file(int ta_id, int student_num, int mark) {
     char filename[20];
     snprintf(filename, sizeof(filename), "TA%d.txt", ta_id + 1);
@@ -50,23 +39,10 @@ void write_mark_to_file(int ta_id, int student_num, int mark) {
     }
 }
 
-int try_acquire_semaphores(int ta_id) {
-    int next_sem = (ta_id + 1) % NUM_TAS;
-    
-    if (sem_trywait(semaphores[ta_id]) == 0) {
-        if (sem_trywait(semaphores[next_sem]) == 0) {
-            return 1;
-        }
-        sem_post(semaphores[ta_id]);
-    }
-    return 0;
-}
-
 int acquire_semaphores_safely(int ta_id) {
     int first_sem = ta_id;
     int second_sem = (ta_id + 1) % NUM_TAS;
     
-    // Always acquire lower numbered semaphore first
     if (first_sem > second_sem) {
         int temp = first_sem;
         first_sem = second_sem;
@@ -80,18 +56,15 @@ int acquire_semaphores_safely(int ta_id) {
                 return 1;
             }
             sem_post(semaphores[first_sem]);
-            
-            // Exponential backoff
-            unsigned int backoff_time = MIN_BACKOFF_TIME * (1 << retries);
-            if (backoff_time > MAX_BACKOFF_TIME) backoff_time = MAX_BACKOFF_TIME;
-            usleep(rand() % backoff_time);
         }
+        unsigned int backoff_time = MIN_BACKOFF_TIME * (1 << retries);
+        if (backoff_time > MAX_BACKOFF_TIME) backoff_time = MAX_BACKOFF_TIME;
+        usleep(rand() % backoff_time);
         retries++;
     }
     return 0;
 }
 
-// Modified TA process function
 void ta_process(int ta_id, SharedData *shared_data) {
     char filename[20];
     snprintf(filename, sizeof(filename), "TA%d.txt", ta_id + 1);
@@ -101,26 +74,21 @@ void ta_process(int ta_id, SharedData *shared_data) {
     int rounds = 0;
     
     while (rounds < NUM_ROUNDS) {
-        // Try to acquire resources with exponential backoff
         while (!acquire_semaphores_safely(ta_id)) {
-            printf("TA %d backing off and retrying\n", ta_id + 1);
+            printf("TA %d: Backing off and retrying\n", ta_id + 1);
             usleep(rand() % MAX_BACKOFF_TIME);
         }
         
-        // Critical section
-        int student_num;
-        {
-            student_num = shared_data->student_list[shared_data->current_line][shared_data->current_pos];
-            printf("TA %d reading student %04d\n", ta_id + 1, student_num);
-            
-            shared_data->current_pos++;
-            if (shared_data->current_pos >= STUDENTS_PER_LINE) {
-                shared_data->current_pos = 0;
-                shared_data->current_line = (shared_data->current_line + 1) % NUM_LINES;
-            }
+        printf("TA %d: Accessing database\n", ta_id + 1);
+        int student_num = shared_data->student_list[shared_data->current_line][shared_data->current_pos];
+        printf("TA %d: Reading student %04d\n", ta_id + 1, student_num);
+        
+        shared_data->current_pos++;
+        if (shared_data->current_pos >= STUDENTS_PER_LINE) {
+            shared_data->current_pos = 0;
+            shared_data->current_line = (shared_data->current_line + 1) % NUM_LINES;
         }
         
-        // Release resources immediately after critical section
         int first_sem = ta_id;
         int second_sem = (ta_id + 1) % NUM_TAS;
         if (first_sem > second_sem) {
@@ -131,9 +99,8 @@ void ta_process(int ta_id, SharedData *shared_data) {
         sem_post(semaphores[second_sem]);
         sem_post(semaphores[first_sem]);
         
-        // Rest of the process remains the same
         if (student_num == 9999) {
-            printf("TA %d completed round %d\n", ta_id + 1, rounds + 1);
+            printf("TA %d: Completed round %d\n", ta_id + 1, rounds + 1);
             rounds++;
             if (rounds >= NUM_ROUNDS) break;
             continue;
@@ -141,14 +108,15 @@ void ta_process(int ta_id, SharedData *shared_data) {
         
         int mark = rand() % 11;
         write_mark_to_file(ta_id, student_num, mark);
-        sleep(rand() % 10 + 1);
+        printf("TA %d: Marking student %04d with grade %d\n", ta_id + 1, student_num, mark);
+        sleep(rand() % 4 + 1);  // Marking delay between 1-4 seconds
     }
     exit(0);
 }
+
 int main() {
     srand(time(NULL));
     
-    // Create and initialize shared memory
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     if (shm_fd == -1) {
         perror("shm_open failed");
@@ -161,13 +129,12 @@ int main() {
     }
     
     SharedData *shared_data = mmap(NULL, sizeof(SharedData), 
-                                 PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+                                   PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (shared_data == MAP_FAILED) {
         perror("mmap failed");
         exit(1);
     }
     
-    // Initialize shared data from file
     FILE *student_list = fopen("student_list.txt", "r");
     if (!student_list) {
         perror("Failed to open student list");
@@ -188,7 +155,6 @@ int main() {
     }
     fclose(student_list);
     
-    // Initialize semaphores
     for (int i = 0; i < NUM_TAS; i++) {
         sem_unlink(SEM_NAMES[i]);
         semaphores[i] = sem_open(SEM_NAMES[i], O_CREAT, 0644, 1);
@@ -198,7 +164,6 @@ int main() {
         }
     }
     
-    // Create TA processes
     pid_t pids[NUM_TAS];
     for (int i = 0; i < NUM_TAS; i++) {
         pids[i] = fork();
@@ -211,12 +176,10 @@ int main() {
         }
     }
     
-    // Wait for all TAs to finish
     for (int i = 0; i < NUM_TAS; i++) {
         waitpid(pids[i], NULL, 0);
     }
     
-    // Cleanup
     for (int i = 0; i < NUM_TAS; i++) {
         sem_close(semaphores[i]);
         sem_unlink(SEM_NAMES[i]);
