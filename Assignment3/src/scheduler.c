@@ -49,13 +49,20 @@ void log_memory_status(void) {
 }
 
 int find_memory_partition(unsigned int size) {
+    int best_fit = -1;
+    unsigned int smallest_suitable = UINT_MAX;
+    
     for (int i = 0; i < NUM_PARTITIONS; i++) {
-        if (memory_partitions[i].occupied_by == -1 && memory_partitions[i].size >= size) {
-            return i;
+        if (memory_partitions[i].occupied_by == -1 && 
+            memory_partitions[i].size >= size &&
+            memory_partitions[i].size < smallest_suitable) {
+            best_fit = i;
+            smallest_suitable = memory_partitions[i].size;
         }
     }
-    return -1;
+    return best_fit;
 }
+
 
 void load_processes(const char* filename) {
     FILE* file = fopen(filename, "r");
@@ -116,13 +123,14 @@ struct PCB* dequeue_process(void) {
 
 int check_all_processes_done(void) {
     for (int i = 0; i < num_processes; i++) {
-        if (strcmp(pcb_table[i].state, STATE_TERMINATED) != 0) {
+        if (strcmp(pcb_table[i].state, STATE_TERMINATED) != 0 &&
+            (strcmp(pcb_table[i].state, STATE_NEW) != 0 || 
+             pcb_table[i].arrival_time <= current_time)) {
             return 0;
         }
     }
     return 1;
 }
-
 void handle_process_completion(struct PCB* process) {
     memory_partitions[process->partition_number].occupied_by = -1;
     strcpy(process->state, STATE_TERMINATED);

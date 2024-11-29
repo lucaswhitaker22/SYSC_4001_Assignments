@@ -1,10 +1,16 @@
 #!/bin/bash
 cd ./Assignment3/tests/t3
-# test_scenario3.sh - Mixed CPU and I/O bound processes
+# test_scenario3.sh - High Priority Short Jobs
 cat > input_data.txt << EOF
-0,20,0,500,100,10
-1,15,50,300,0,0
-2,10,100,200,50,5
+1, 5, 0, 10, 5, 2
+2, 5, 0, 8, 4, 1
+3, 5, 0, 6, 3, 1
+4, 5, 0, 4, 2, 1
+5, 5, 0, 2, 1, 1
 EOF
-
-./../../output/interrupts input_data.txt
+printf '\n---------------------------------------------\nPriority Scheduler\n-----------------------------------------------------------\n'
+./../../output/priority input_data.txt
+printf '\n---------------------------------------------\nFCFS Scheduler\n-----------------------------------------------------------\n'
+./../../output/fcfs input_data.txt
+printf '\n---------------------------------------------\nRR Scheduler\n-----------------------------------------------------------\n'
+./../../output/rr input_data.txt
