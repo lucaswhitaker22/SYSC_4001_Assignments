@@ -7,9 +7,9 @@
       "request": "launch",
       "args": [],
       "stopAtEntry": false,
-      "externalConsole": true,
-      "cwd": "c:/Users/lwhitaker/Personal/SYSC4001/SYSC_4001_Assignments/Assignment3/src",
-      "program": "c:/Users/lwhitaker/Personal/SYSC4001/SYSC_4001_Assignments/Assignment3/src/build/Debug/outDebug",
+      "externalConsole": false,
+      "cwd": "/workspaces/SYSC_4001_Assignments/Assignment2",
+      "program": "/workspaces/SYSC_4001_Assignments/Assignment2/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
