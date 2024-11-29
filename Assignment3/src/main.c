@@ -19,9 +19,9 @@ int main(int argc, char* argv[]) {
     }
 
     load_processes(argv[1]);
-   // run_priority();
+   run_priority();
    // run_fcfs();
-   run_round_robin();
+   //run_round_robin();
     calculate_metrics();
     
     fclose(execution_log);

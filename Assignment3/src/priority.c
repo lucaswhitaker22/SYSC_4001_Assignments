@@ -9,9 +9,10 @@ extern unsigned int current_time;
 extern int num_processes;
 extern struct MemoryPartition memory_partitions[NUM_PARTITIONS];
 extern struct PCB pcb_table[MAX_PROCESSES];
+
 void enqueue_process_priority(struct PCB* process) {
     int i;
-    // Find position to insert based on priority (lower number = higher priority)
+    // Find position to insert based on priority
     for (i = ready_queue_size - 1; i >= 0; i--) {
         if (ready_queue[i]->priority <= process->priority) {
             break;
