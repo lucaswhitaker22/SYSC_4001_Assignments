@@ -1,5 +1,5 @@
 #!/bin/bash
-cd /workspaces/SYSC_4001_Assignments/Assignment3/tests
+cd C:/Users/lwhitaker/Personal/SYSC4001/SYSC_4001_Assignments/Assignment3/tests
 
 output_file="concatenated_output.txt"
 
@@ -14,7 +14,15 @@ process_file() {
     echo "----------" >> "$output_file"
     echo "File Name: $filename" >> "$output_file"
     echo "<Content>" >> "$output_file"
-    cat "$file" >> "$output_file"
+    
+    if [[ $filename == execution_log_* ]]; then
+        # For execution log files, only include the last 6 lines
+        tail -n 6 "$file" >> "$output_file"
+    else
+        # For other files, include the entire content
+        cat "$file" >> "$output_file"
+    fi
+    
     echo "</Content>" >> "$output_file"
     echo "" >> "$output_file"
 }
