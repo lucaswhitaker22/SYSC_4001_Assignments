@@ -1,0 +1,21 @@
+# Deadlock Prevention
+### Ordered Resource Acquisition
+- Semaphores are acquired by lowest number first. This consistent order of acquiring semaphores helps to prevent the circular wait conditions, a common cause of deadlocks.
+
+### Timeout and Retry Mechanism
+- We have a function called acquire_semaphores_safely that enforces a retry limit of MAX_RETRIES.
+- Additionally, we enforce the rule that if a TA cannot retrieve both semaphores, it releases the semaphore its currently holding and tries again. (Retry Mechanism)
+
+### No Resource Holding
+- TA's do not hold resources after they release their semaphore. Consequently, the time resources are held gets reduced, also reducing the risk of deadlocks due to contention.
+
+# Livelock Prevention
+### Exponential Backoff
+- TA's do not immediately retry acquiring a resource after failing. Instead, they wait a random time before trying again.
+- We use a backoff time, which exponentially increases after each try
+- Consequently, TAs are prevented from continuously interfering with each other
+
+### Progress Tracking
+- Progress is tracked by TAs though the student list
+- The output files (TA#.txt) contain all marks of multiple students that the TA marked
+- This prevents TAs form getting student in an infinite cycle of retrying, but not actually making progress
