@@ -1,5 +1,5 @@
-#!/bin/bash
-cd ./Assignment3/tests/t10
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
 # test_scenario10.sh - Processes with low I/O frequency
 cat > input_data.txt << EOF
 1, 10, 0, 40, 10, 2

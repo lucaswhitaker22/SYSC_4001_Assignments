@@ -1,5 +1,5 @@
-#!/bin/bash
-cd ./Assignment3/tests/t9
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
 # test_scenario9.sh - Long-running with Frequent I/O
 cat > input_data.txt << EOF
 1, 5, 0, 200, 50, 5

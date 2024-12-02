@@ -1,5 +1,6 @@
-#!/bin/bash
-cd ./Assignment3/tests/t3
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+
 # test_scenario3.sh - High Priority Short Jobs
 cat > input_data.txt << EOF
 1, 5, 0, 10, 5, 2

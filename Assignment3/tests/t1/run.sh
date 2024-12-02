@@ -1,5 +1,6 @@
-#!/bin/bash
-cd ./Assignment3/tests/t1
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+
 # test_scenario1.sh - IO-bound processes
 cat > input_data.txt << EOF
 15, 10, 0, 25, 11, 3

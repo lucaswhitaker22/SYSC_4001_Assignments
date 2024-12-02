@@ -1,5 +1,6 @@
-#!/bin/bash
-cd ./Assignment3/tests/t8
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+
 # test_scenario8.sh - Priority Testing (for Priority Scheduler)
 cat > input_data.txt << EOF
 1, 2, 0, 15, 5, 1

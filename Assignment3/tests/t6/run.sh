@@ -1,5 +1,6 @@
-#!/bin/bash
-cd ./Assignment3/tests/t6
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+
 # test_scenario6.sh -  memory constraints
 cat > input_data.txt << EOF
 1, 5, 0, 50, 2, 5

@@ -1,5 +1,6 @@
-#!/bin/bash
-cd ./Assignment3/tests/t5
+#!/usr/bin/env bash
+cd "$(dirname "$0")"
+
 
 # test_scenario5.sh - Long burst processes
 cat > input_data.txt << EOF
