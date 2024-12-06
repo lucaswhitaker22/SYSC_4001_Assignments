@@ -1,0 +1,48 @@
+Submission format:
+
+Part1_report_<student#1>_<student#2>.docx / .doc
+Report for the simulator.
+interrupts_<student#1>_<student#2>.cpp / .c
+Your program must take two parameters: The input file name, and the scheduler.
+Say your program compiles to a binary called 'sim', then doing the following calls your simulator for FCFS:
+./sim input_data_1.txt FCFS
+Similarly:
+./sim input_data_1.txt EP (EP is External Priority)
+./sim input_data_1.txt RR
+interrupts_<student#1>_<student#2>.hpp / .h (non-mandatory)
+input_data_1.txt
+⋮
+input_data_n.txt
+
+These would be your n test cases for part 1. n >= 10.
+test_1.txt
+test_2.txt
+
+These are your script files to compile and execute the program. Ensure that this script runs on Linux (use your lab computers).
+To run the script, we will use: source test_1.txt
+Example script file:
+!# /bin/bash
+g++ interrupts_<student#1>_<student#2>.cpp -I ./ -o sim
+./sim input_data_1.txt FCFS
+execution_<student#1>_<student#2>.txt
+Execution output of test_case_1.txt
+memory_status_<student#1>_<student#2>.txt
+memory_status output of test_case_1.txt
+Part2_A_<student#1>_<student#2>.cpp / .c
+Part2_B_<student#1>_<student#2>.cpp / .c
+Part2_C_<student#1>_<student#2>.cpp / .c
+Part2_E_<student#1>_<student#2>.cpp / .c (bonus)
+Part2_<student#1>_<student#2>.hpp / .h (non-mandatory)
+Just use a common header file (if any) for all the programs
+README.txt
+Details on how to compile and execute your code. If possible, include a script files to compile the code
+database.txt
+database file for part 2.
+TA1.txt
+⋮
+TA5.txt
+These are the individual TA files (for the final part)
+Part2_report_<student#1>_<student#2>.txt/.docx/.doc
+This contains both reportD.txt and reportE.txt, and other relevant discussions pertaining to the solution to the critical section problem.
+Part3_concepts_<student#1>_<student#2>.docx/.doc
+contributions.txt

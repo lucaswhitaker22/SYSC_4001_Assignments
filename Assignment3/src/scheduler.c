@@ -51,7 +51,7 @@ void log_memory_status(void) {
 int find_memory_partition(unsigned int size) {
     // Use best-fit algorithm
     int best_fit = -1;
-    unsigned int smallest_suitable = UINT_MAX;
+    unsigned int smallest_suitable = 128;
     
     // Check if any partitions are freed up
     for (int i = 0; i < NUM_PARTITIONS; i++) {

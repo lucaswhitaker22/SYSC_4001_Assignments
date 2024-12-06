@@ -6,12 +6,25 @@
 #define MAX_FILENAME 100
 
 int main(int argc, char* argv[]) {
-    const char* TYPE = "fcfs";  // Change this to switch schedulers
     char execution_filename[MAX_FILENAME];
     char memory_filename[MAX_FILENAME];
+    const char* TYPE;
     
-    if (argc != 2) {
-        printf("Usage: %s <input_file>\n", argv[0]);
+    if (argc != 3) {
+        printf("Usage: %s <input_file> <scheduler_type>\n", argv[0]);
+        printf("Scheduler types: FCFS, RR, EP\n");
+        return 1;
+    }
+
+    // Set TYPE based on the command-line argument
+    if (strcasecmp(argv[2], "FCFS") == 0) {
+        TYPE = "FCFS";
+    } else if (strcasecmp(argv[2], "RR") == 0) {
+        TYPE = "RR";
+    } else if (strcasecmp(argv[2], "EP") == 0) {
+        TYPE = "EP";
+    } else {
+        printf("Invalid scheduler type. Use FCFS, RR, or EP.\n");
         return 1;
     }
 
@@ -31,11 +44,11 @@ int main(int argc, char* argv[]) {
     load_processes(argv[1]);
 
     // Choose scheduler based on TYPE
-    if (strcmp(TYPE, "priority") == 0) {
+    if (strcmp(TYPE, "EP") == 0) {
         run_priority();
-    } else if (strcmp(TYPE, "fcfs") == 0) {
+    } else if (strcmp(TYPE, "FCFS") == 0) {
         run_fcfs();
-    } else if (strcmp(TYPE, "rr") == 0) {
+    } else if (strcmp(TYPE, "RR") == 0) {
         run_round_robin();
     }
 

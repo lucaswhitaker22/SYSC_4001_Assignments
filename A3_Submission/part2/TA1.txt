@@ -1,0 +1,4 @@
+Student: 0001, Mark: 9
+Student: 0028, Mark: 2
+Student: 0032, Mark: 10
+Student: 0037, Mark: 4
